@@ -30,7 +30,7 @@ fn validate_dsl_path(path: &str) -> Result<String, String> {
 #[command(version, about, long_about = None)]
 pub struct Args {
     /// The port to run the server on
-    #[arg(short, long, env, default_value = "8080", value_parser = clap::value_parser!(u16).range(1..65535))]
+    #[arg(short, long, env, default_value = "8090", value_parser = clap::value_parser!(u16).range(1..65535))]
     pub port: u16,
 
     /// Bind address for the server

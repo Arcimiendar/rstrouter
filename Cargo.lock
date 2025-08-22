@@ -728,9 +728,9 @@ dependencies = [
 
 [[package]]
 name = "io-uring"
-version = "0.7.9"
+version = "0.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d93587f37623a1a17d94ef2bc9ada592f5465fe7732084ab7beefabe5c77c0c4"
+checksum = "046fa2d4d00aea763528b4950358d0ead425372445dc8ff86312b3c69ff7727b"
 dependencies = [
  "bitflags",
  "cfg-if",
@@ -1068,7 +1068,7 @@ checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
 [[package]]
 name = "rstmytype"
 version = "0.1.0"
-source = "git+https://github.com/Arcimiendar/rstmytype.git#63560b6229075a2b49e8d9ba496b59b06b8875ab"
+source = "git+https://github.com/Arcimiendar/rstmytype.git#8534a236aa3ba1b769559c9f94ace39e8d55edc3"
 dependencies = [
  "convert_case",
  "log",

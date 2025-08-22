@@ -1,13 +1,16 @@
 use std::time::Instant;
 
-use tokio;
-use log::{LevelFilter, info};
+use axum::{Router, extract::Request, middleware::Next, response::Response};
+use log::{LevelFilter, info, warn};
 use log4rs;
 use log4rs::append::console::ConsoleAppender;
 use log4rs::config::{Appender, Config, Root};
+use tokio;
+
+use crate::endpoints::load_dsl_endpoints;
 
 mod args;
-
+mod endpoints;
 
 fn init_logging(args: &args::types::Args) -> Option<()> {
     match &args.log_config {
@@ -19,7 +22,8 @@ fn init_logging(args: &args::types::Args) -> Option<()> {
 
             let config = Config::builder()
                 .appender(Appender::builder().build("stdout", Box::new(stdout)))
-                .build(Root::builder().appender("stdout").build(LevelFilter::Debug)).ok()?;
+                .build(Root::builder().appender("stdout").build(LevelFilter::Debug))
+                .ok()?;
             log4rs::init_config(config).ok()?;
         }
     }
@@ -37,6 +41,15 @@ fn print_hello() {
     println!(r"                                               ");
 }
 
+async fn uri_middleware(request: Request, next: Next) -> Response {
+    let uri = request.uri().clone();
+
+    let response = next.run(request).await;
+
+    info!("{} - {}", uri, response.status());
+
+    response
+}
 
 async fn init_and_run(args: &args::types::Args) {
     let start = Instant::now();
@@ -48,9 +61,25 @@ async fn init_and_run(args: &args::types::Args) {
 
     print_hello();
 
+    let app = Router::new().layer(axum::middleware::from_fn(uri_middleware));
+    let app = load_dsl_endpoints(&args, app);
+
+    let listener = match tokio::net::TcpListener::bind(format!("{}:{}", args.bind, args.port)).await
+    {
+        Ok(l) => l,
+        Err(e) => {
+            warn!("{}", e);
+            return;
+        }
+    };
+
     let duration = start.elapsed();
     info!("Server startup completed in {:?}", duration);
     info!("Starting server at http://{}:{}", args.bind, args.port);
+
+    if let Err(e) = axum::serve(listener, app).await {
+        warn!("{}", e);
+    }
 }
 
 fn main() {
