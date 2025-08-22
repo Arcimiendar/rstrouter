@@ -11,6 +11,7 @@ use crate::endpoints::load_dsl_endpoints;
 
 mod args;
 mod endpoints;
+mod engine;
 
 fn init_logging(args: &args::types::Args) -> Option<()> {
     match &args.log_config {
@@ -82,7 +83,26 @@ async fn init_and_run(args: &args::types::Args) {
     }
 }
 
+use boa_engine::{Context, Source};
+
 fn main() {
+    let mut context = Context::default();
+    let js_code = r#"
+        a.d
+    "#;
+    match context.eval(Source::from_bytes(js_code)) {
+        Ok(res) => {
+            println!(
+                "{}",
+                res.to_string(&mut context).unwrap().to_std_string_escaped()
+            );
+        }
+        Err(e) => {
+            // Pretty print the error
+            eprintln!("Uncaught {e}");
+        }
+    };
+
     let args = args::types::get_args();
     match tokio::runtime::Builder::new_current_thread()
         .enable_all()

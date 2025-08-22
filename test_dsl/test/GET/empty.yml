@@ -1,0 +1,6 @@
+declaration: 
+  description: "test get"
+
+task:
+  assign:
+    f: ${incoming.params.body}

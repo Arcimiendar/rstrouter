@@ -7,11 +7,10 @@ use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
 pub struct Guard {
-    pub content: String,
     pub yml_content: YmlValue,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Endpoint {
     pub guards: Vec<Guard>,
     pub tag: String,
@@ -135,7 +134,7 @@ impl Endpoint {
             .flat_map(|e| {
                 if e.path().is_file()
                     && !e.file_name().to_str()?.starts_with(".guard")
-                    && (e.path().extension()? == "yaml"  || e.path().extension()? == "yml")
+                    && (e.path().extension()? == "yaml" || e.path().extension()? == "yml")
                 {
                     return Some(vec![Self::parse_from_file(
                         &e,
@@ -203,10 +202,7 @@ impl Guard {
             return None;
         };
 
-        Some(Self {
-            content,
-            yml_content,
-        })
+        Some(Self { yml_content })
     }
 }
 
