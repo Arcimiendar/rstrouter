@@ -1,0 +1,11 @@
+
+services:
+  rstrouter:
+    build:
+      context: .
+    ports:
+      - "8090:8090"
+    environment:
+      - BIND=0.0.0.0
+    volumes:
+      - ./test_dsl:/DSL

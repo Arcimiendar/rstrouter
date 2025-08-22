@@ -1,0 +1,14 @@
+[package]
+name = "rstrouter"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio = "1.47.1"
+utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
+rstmytype = { git = "https://github.com/Arcimiendar/rstmytype.git" }
+serde_yaml_ng = "0.10.0"
+log = "0.4.27"
+log4rs = "1.3.0"
+clap = { version = "4.5.45", features = ["derive", "env"] }
+axum = "0.8.4"
