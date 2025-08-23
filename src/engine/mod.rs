@@ -39,7 +39,7 @@ impl TaskTree {
             return context; 
         };
 
-        let mut res = task.execute(context);
+        let mut res = task.execute(context).await;
         while let Some(next) = res.1 {
             let mut next_task = None;
             for task in &self.tasks {
@@ -49,7 +49,7 @@ impl TaskTree {
             }
 
             let Some(task) = next_task else { break; };
-            res = task.execute(res.0);
+            res = task.execute(res.0).await;
         };
 
         return res.0;

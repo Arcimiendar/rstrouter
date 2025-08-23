@@ -1,6 +1,8 @@
 use log::info;
+use async_trait::async_trait;
 
 use crate::engine::tasks::task::{Task, TaskFactory, ExecutionResult};
+use crate::engine::context::Context;
 
 #[derive(Debug)]
 pub struct DeclarationFactory {}
@@ -40,11 +42,15 @@ impl TaskFactory for DeclarationFactory {
     }
 }
 
+#[async_trait]
 impl Task for Declaration {
-    fn execute(&self, context: crate::engine::context::Context) -> ExecutionResult<'_> {
+    async fn execute(&self, context: Context) -> ExecutionResult {
         // this is noop for now
         info!("Declaration was executed!");
-        ExecutionResult(context, self.next_task.as_deref())
+        let Some(next_task) = &self.next_task else {
+            return ExecutionResult(context, None);
+        };
+        ExecutionResult(context, Some(next_task.clone()))
     }
 
 

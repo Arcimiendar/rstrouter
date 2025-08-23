@@ -1,13 +1,18 @@
 use std::fmt::Debug;
+use async_trait::async_trait;
 
 use serde_yaml_ng::Value as YmlValue;
 
 use crate::engine::context::Context;
 
-pub struct ExecutionResult<'a>(pub Context, pub Option<&'a str>);
+pub struct ExecutionResult(pub Context, pub Option<String>); // I'm tired fighting with borrow checker
+// next task will not be a ptr to a task, but a name of task
+// same with Option<&str> in async traits. I will clone str instead.
 
+
+#[async_trait]
 pub trait Task: Debug + Send + Sync {
-    fn execute(&self, context: Context) -> ExecutionResult<'_>;
+    async fn execute(&self, context: Context) -> ExecutionResult;
 
     fn get_name(&self) -> &str;
 }
