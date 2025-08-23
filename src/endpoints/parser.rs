@@ -104,7 +104,7 @@ impl Endpoint {
                     );
                     return None;
                 };
-                let url_path = tag.to_str()?.to_string();
+                let url_path = format!("/{}", tag.to_str()?);
                 Some(Self::parse_with_method(&e, &tag, url_path, method, &guards))
             })
             .flat_map(|e| e)

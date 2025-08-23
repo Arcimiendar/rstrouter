@@ -4,3 +4,6 @@ declaration:
 task:
   assign:
     f: ${incoming.params.body}
+
+anotherTask:
+  return: ${incoming.params.body}

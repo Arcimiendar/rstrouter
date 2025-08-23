@@ -25,7 +25,7 @@ pub fn load_dsl_endpoints(args: &crate::args::types::Args, mut app: Router) -> R
 
     for (key, chunk_iter) in &flatten_endpoints {
         let chunk: Vec<&Endpoint> = chunk_iter.collect();
-        app = app.route(&format!("/{}", key), get_route(chunk));
+        app = app.route(&key, get_route(chunk));
     }
 
     app = load_swagger(app, &collection);
