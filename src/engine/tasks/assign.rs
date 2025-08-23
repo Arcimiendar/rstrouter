@@ -1,34 +1,29 @@
 use crate::engine::context::Context;
 use crate::engine::tasks::task::{ExecutionResult, Task, TaskFactory};
 use async_trait::async_trait;
+use log::warn;
+use serde_json::Value as JsonValue;
+use serde_yaml_ng::Value as YmlValue;
 
 #[derive(Debug)]
 pub struct AssignFactory {}
 
 #[derive(Debug)]
 pub struct Assign {
-    return_expr: String,
-    status_code: u16,
+    assign_expr: YmlValue,
     next_task: Option<String>,
     name: String,
 }
 
 impl TaskFactory for AssignFactory {
-    fn from_yml(&self, task_name: &str, yml: &serde_yaml_ng::Value) -> Option<Box<dyn Task>> {
+    fn from_yml(&self, task_name: &str, yml: &YmlValue) -> Option<Box<dyn Task>> {
         let task_body = yml.get(task_name)?;
-        let assign_exprs = task_body.get("assign")?.as_mapping()?;
-
-        let status_code: u16 = task_body
-            .get("status")
-            .and_then(|v| v.as_u64())
-            .and_then(|v| v.try_into().ok())
-            .unwrap_or(200);
+        let assign_exprs = task_body.get("assign")?;
 
         let next_task = self.get_next_task(task_name, yml);
 
         Some(Box::new(Assign {
-            return_expr: return_expr.to_string(),
-            status_code: status_code,
+            assign_expr: assign_exprs.clone(),
             next_task: next_task,
             name: task_name.to_string(),
         }))
@@ -41,12 +36,51 @@ impl AssignFactory {
     }
 }
 
+impl Assign {
+    fn render_inner_strings(&self, value: &JsonValue, context: &mut Context) -> JsonValue {
+        if let Some(v) = value.as_str() {
+            return context.evaluate_expr(v);
+        }
+
+        if let Some(m) = value.as_object() {
+            let new_m = m
+                .iter()
+                .map(|(k, v)| (k.to_string(), self.render_inner_strings(v, context)))
+                .collect();
+
+            return JsonValue::Object(new_m);
+        }
+
+        if let Some(a) = value.as_array() {
+            let new_a: Vec<JsonValue> = a
+                .iter()
+                .map(|v| self.render_inner_strings(v, context))
+                .collect();
+
+            return JsonValue::Array(new_a);
+        }
+        // other types does not require any js evaluation
+        value.clone()
+    }
+}
+
 #[async_trait]
 impl Task for Assign {
-    async fn execute(&self, context: Context) -> ExecutionResult {
-        let return_value = context.evaluate_expr(&self.return_expr);
-        *context.return_json.borrow_mut() = return_value;
-        *context.status_code.borrow_mut() = self.status_code;
+    async fn execute(&self, mut context: Context) -> ExecutionResult {
+        if let Ok(v) = serde_json::to_value(&self.assign_expr) {
+            let rendered = self.render_inner_strings(&v, &mut context);
+            rendered
+                .as_object()
+                .iter()
+                .flat_map(|f| f.iter())
+                .map(|(k, v)| (k, v.to_string()))
+                .map(|(k, v)| format!("${{var {} = {};!}}", k, v))
+                .for_each(|expr| {
+                    context.evaluate_expr(&expr);
+                });
+        } else {
+            warn!("Incorrect assign value in {}", self.get_name());
+        }
 
         ExecutionResult(context, self.next_task.clone())
     }

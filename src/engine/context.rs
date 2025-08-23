@@ -5,7 +5,6 @@ use serde_json::{Value as JsonValue, json};
 use serde_urlencoded;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::str::FromStr;
 
 #[derive(Debug, Clone)]
 pub struct ReturnValue {
@@ -116,13 +115,21 @@ impl Context {
     }
 
     fn execute_js_signle_line(&self, expr: &str) -> JsonValue {
-        warn!("execute: {}", expr);
-
         let mut context = self.context.borrow_mut();
+        let s = format!("JSON.stringify({})", expr);
+        let sc = s.as_bytes(); // borrow check is crazy here
+
+        let source = if expr.ends_with('!') {
+            Source::from_bytes(expr[0..expr.len() - 1].as_bytes())
+        } else {
+            Source::from_bytes(sc)
+        };
         context
-            .eval(Source::from_bytes(
-                format!("JSON.stringify({})", expr).as_bytes(),
-            ))
+            .eval(source)
+            .map_err(|f| {
+                warn!("Uncaught JS error: {}", f);
+                f
+            })
             .ok()
             .and_then(|f| {
                 f.as_string()
@@ -134,19 +141,16 @@ impl Context {
 
     pub fn evaluate_expr(&self, expr: &str) -> JsonValue {
         let mut expr_copy = expr.to_string();
-        warn!("exec expr {}", expr);
 
         if expr_copy.contains("#[") && expr_copy.contains("#]") {
             expr_copy = self.substitute_template(expr_copy);
         }
 
         if expr_copy.starts_with("${") && expr_copy.ends_with("}") {
-            warn!("exec_js {}", expr_copy[2..expr_copy.len() - 1].to_string());
             return self.execute_js_signle_line(&expr_copy[2..expr_copy.len() - 1]);
         }
 
         if expr_copy.contains("${") && expr_copy.contains("}") {
-            warn!("exec js 2 {}", format!("`{}`", expr_copy));
             return self.execute_js_signle_line(&format!("`{}`", expr_copy));
         }
 

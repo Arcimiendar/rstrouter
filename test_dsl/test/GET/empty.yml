@@ -1,9 +1,13 @@
 declaration: 
   description: "test get"
 
-# task:
-#   assign:
-#     f: ${incoming.params.body}
+task:
+  assign:
+    f: ${incoming.params}
+    x:
+      y: 
+        - ${incoming.headers}
+        - ${incoming.headers}
 
 anotherTask:
-  return: ${incoming.headers}
+  return: ${x}
