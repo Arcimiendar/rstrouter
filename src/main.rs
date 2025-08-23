@@ -9,9 +9,9 @@ use tokio;
 
 use crate::endpoints::load_dsl_endpoints;
 
-mod engine;
 mod args;
 mod endpoints;
+mod engine;
 
 fn init_logging(args: &args::types::Args) -> Option<()> {
     match &args.log_config {

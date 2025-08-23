@@ -1,22 +1,20 @@
 use axum::extract::Request;
-use serde_yaml_ng::Value as YmlValue;
-use serde_json::{Value as JsonValue, json};
 use axum::{http::StatusCode, response::IntoResponse};
+use serde_json::{Value as JsonValue, json};
+use serde_yaml_ng::Value as YmlValue;
 
 use crate::endpoints::parser::Endpoint;
-use crate::engine::tasks::task::Task;
-use crate::engine::tasks::produce_task;
 use crate::engine::context::Context;
+use crate::engine::tasks::produce_task;
+use crate::engine::tasks::task::Task;
 
-mod tasks;
 mod context;
-
+mod tasks;
 
 #[derive(Debug)]
 struct TaskTree {
     tasks: Vec<Box<dyn Task>>,
 }
-
 
 impl TaskTree {
     fn from_yml(yml: &YmlValue) -> Self {
@@ -24,19 +22,18 @@ impl TaskTree {
             return Self { tasks: vec![] };
         };
 
-        let tasks: Vec<Box<dyn Task>> = mapping.keys()
+        let tasks: Vec<Box<dyn Task>> = mapping
+            .keys()
             .flat_map(|k| Some(k.as_str()?))
-            .flat_map(|k| {
-                produce_task(k, yml)
-            }).collect();
-        
+            .flat_map(|k| produce_task(k, yml))
+            .collect();
+
         Self { tasks: tasks }
     }
 
-
     async fn walk_through(&self, context: Context) -> Context {
-        let Some(task) = self.tasks.first() else { 
-            return context; 
+        let Some(task) = self.tasks.first() else {
+            return context;
         };
 
         let mut res = task.execute(context).await;
@@ -48,19 +45,20 @@ impl TaskTree {
                 }
             }
 
-            let Some(task) = next_task else { break; };
+            let Some(task) = next_task else {
+                break;
+            };
             res = task.execute(res.0).await;
-        };
+        }
 
         return res.0;
     }
 }
 
-
 #[derive(Debug)]
 pub struct Engine {
     guards: Vec<TaskTree>,
-    tree: TaskTree
+    tree: TaskTree,
 }
 
 pub struct EngineResponse(pub JsonValue, pub u16);
@@ -69,18 +67,22 @@ impl IntoResponse for EngineResponse {
     fn into_response(self) -> axum::response::Response {
         (
             StatusCode::from_u16(self.1).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
-            self.0.to_string()
-        ).into_response()
+            self.0.to_string(),
+        )
+            .into_response()
     }
 }
 
 impl Engine {
     pub fn new(endpoint: &Endpoint) -> Self {
-        Self { 
-            guards: endpoint.guards.iter()
+        Self {
+            guards: endpoint
+                .guards
+                .iter()
                 .map(|g| TaskTree::from_yml(&g.yml_content))
-                .collect(), 
-            tree: TaskTree::from_yml(&endpoint.yml_content)}
+                .collect(),
+            tree: TaskTree::from_yml(&endpoint.yml_content),
+        }
     }
 
     pub async fn execute(&self, request: Request) -> EngineResponse {
@@ -89,18 +91,23 @@ impl Engine {
             context = guard.walk_through(context).await;
             let return_value = context.get_return_value();
             if return_value.status < 200 && return_value.status >= 300 {
-                return EngineResponse(json!({
-                    "response": return_value.json
-                }), return_value.status)
-            } 
+                return EngineResponse(
+                    json!({
+                        "response": return_value.json
+                    }),
+                    return_value.status,
+                );
+            }
         }
-
 
         context = self.tree.walk_through(context).await;
         let return_value = context.get_return_value();
 
-        EngineResponse(json!({
-            "response": return_value.json,
-        }), return_value.status)
+        EngineResponse(
+            json!({
+                "response": return_value.json,
+            }),
+            return_value.status,
+        )
     }
 }
