@@ -4,10 +4,6 @@ RUN cargo install cargo-deb
 
 WORKDIR /app
 
-COPY Cargo.toml .
-COPY Cargo.lock . 
-RUN mkdir src
-
 COPY . .
 
 RUN cargo build

@@ -14,12 +14,10 @@ pub fn get_route(chunk: Vec<&Endpoint>) -> MethodRouter {
 
         if endpoint.method == ApiEndpointMethod::Get {
             method_router = method_router.get(|q: Request| async move {
-                info!("{:?}", q);
                 engine.execute(q).await
             })
         } else if endpoint.method == ApiEndpointMethod::Post {
             method_router = method_router.post(|q: Request| async move {
-                info!("{:?}", q);
                 engine.execute(q).await
             })
         }

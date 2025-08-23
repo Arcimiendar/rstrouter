@@ -6,8 +6,18 @@ task:
     f: ${incoming.params}
     x:
       y: 
+        - ${incoming.params}
         - ${incoming.headers}
-        - ${incoming.headers}
+
+branch:
+  switch:
+  - condition: ${f.h == 1}
+    next: branched
 
 anotherTask:
   return: ${x}
+  next: end
+
+branched:
+  return: ${f}
+ 

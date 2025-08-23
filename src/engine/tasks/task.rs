@@ -3,7 +3,7 @@ use std::fmt::Debug;
 
 use serde_yaml_ng::Value as YmlValue;
 
-use crate::engine::{context::Context, tasks::task};
+use crate::engine::context::Context;
 
 pub struct ExecutionResult(pub Context, pub Option<String>); // I'm tired fighting with borrow checker
 // next task will not be a ptr to a task, but a name of task

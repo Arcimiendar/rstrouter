@@ -1,0 +1,17 @@
+init: 
+  assign:
+    x: ${1}
+
+
+inc:
+  assign:
+    x: ${x + 1}
+
+cond:
+  switch:
+    - condition: ${x > 10}
+      next: toReturn
+  next: inc
+
+toReturn:
+  return: x increased to ${x}
