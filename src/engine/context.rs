@@ -14,9 +14,12 @@ pub struct ReturnValue {
 
 unsafe impl Send for Context {}
 // I'm tired fighting rust. Context will not be executed in multiple thread.
-// and always be operatable inside single stupid thread
+// and always be operatable inside single thread
 // I have no idea how to fight borrow checker here
 // compiles error explains nothing
+// https://users.rust-lang.org/t/why-must-local-variables-in-async-functions-satisfy-send/58348/12
+// as long as it stays inside that feature is fine.
+// checked that drop is correct on the end of request.
 
 #[derive(Debug)]
 pub struct Context {
