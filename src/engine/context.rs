@@ -5,8 +5,8 @@ use serde_json::{Value as JsonValue, json};
 use serde_urlencoded;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::thread;
 use std::sync::mpsc;
+use std::thread;
 
 #[derive(Debug, Clone)]
 pub struct ReturnValue {
@@ -153,8 +153,7 @@ impl LocalContext {
     }
 }
 
-
-enum Command{
+enum Command {
     EvaluateExpr(String),
     Exit,
 }
@@ -172,7 +171,7 @@ impl Context {
     pub fn from_request(request: Request) -> Self {
         let (tx, rx) = mpsc::channel::<Command>();
         let (tx_b, rx_b) = mpsc::channel::<JsonValue>();
-        
+
         let thread = thread::spawn(move || {
             let ctx = LocalContext::from_request(request);
 
@@ -182,18 +181,18 @@ impl Context {
                         if tx_b.send(ctx.evaluate_expr(&s)).is_err() {
                             return;
                         };
-                    },
+                    }
                     Command::Exit => return,
                 };
             }
         });
 
-        Self { 
+        Self {
             status_code: RefCell::new(200),
             return_json: RefCell::new(JsonValue::Null),
-            thread: Some(thread), 
-            tx, 
-            rx: rx_b, 
+            thread: Some(thread),
+            tx,
+            rx: rx_b,
         }
     }
 
@@ -205,7 +204,11 @@ impl Context {
     }
 
     pub fn evaluate_expr(&self, expr: &str) -> JsonValue {
-        if self.tx.send(Command::EvaluateExpr(expr.to_string())).is_err() {
+        if self
+            .tx
+            .send(Command::EvaluateExpr(expr.to_string()))
+            .is_err()
+        {
             return JsonValue::Null;
         };
         self.rx.recv().unwrap_or(JsonValue::Null)

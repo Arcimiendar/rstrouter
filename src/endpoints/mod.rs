@@ -19,7 +19,7 @@ pub fn load_swagger(mut app: Router, collection: &EndpointsCollection) -> Router
 pub fn load_dsl_endpoints(args: &crate::args::types::Args, mut app: Router) -> Router {
     let collection = EndpointsCollection::parse_from_dir(&args.dsl_path);
 
-    info!("Loaded net endpoints collection: {}", collection);
+    info!("Loaded next endpoints collection: {}", collection);
 
     let flatten_endpoints = collection.endpoints.iter().chunk_by(|e| &e.url_path);
 
