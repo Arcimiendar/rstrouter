@@ -1,10 +1,12 @@
 use axum::extract::Request;
 use boa_engine::{Context as JsContext, JsObject, JsString, JsValue, Source, property};
-use log::warn;
+use log::{debug, warn};
 use serde_json::{Value as JsonValue, json};
 use serde_urlencoded;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::thread;
+use std::sync::mpsc;
 
 #[derive(Debug, Clone)]
 pub struct ReturnValue {
@@ -12,7 +14,7 @@ pub struct ReturnValue {
     pub status: u16,
 }
 
-unsafe impl Send for Context {}
+// unsafe impl Send for Context {}
 // I'm tired fighting rust. Context will not be executed in multiple thread.
 // and always be operatable inside single thread
 // I have no idea how to fight borrow checker here
@@ -20,11 +22,10 @@ unsafe impl Send for Context {}
 // https://users.rust-lang.org/t/why-must-local-variables-in-async-functions-satisfy-send/58348/12
 // as long as it stays inside that feature is fine.
 // checked that drop is correct on the end of request.
+// moved JS executor to a separate thread an leaft it hanging there
 
 #[derive(Debug)]
-pub struct Context {
-    pub status_code: RefCell<u16>,
-    pub return_json: RefCell<JsonValue>,
+pub struct LocalContext {
     pub context: RefCell<JsContext>,
 }
 
@@ -89,7 +90,7 @@ fn build_incoming_from_request(request: Request, context: &mut JsContext) -> JsO
     obj
 }
 
-impl Context {
+impl LocalContext {
     pub fn from_request(request: Request) -> Self {
         let mut context = JsContext::default();
 
@@ -100,15 +101,6 @@ impl Context {
             .ok();
         Self {
             context: RefCell::new(context),
-            status_code: RefCell::new(200),
-            return_json: RefCell::new(JsonValue::Null),
-        }
-    }
-
-    pub fn get_return_value(&self) -> ReturnValue {
-        ReturnValue {
-            json: self.return_json.borrow().clone(),
-            status: self.status_code.borrow().clone(),
         }
     }
 
@@ -158,5 +150,74 @@ impl Context {
         }
 
         json!(expr_copy)
+    }
+}
+
+
+enum Command{
+    EvaluateExpr(String),
+    Exit,
+}
+
+#[derive(Debug)]
+pub struct Context {
+    pub status_code: RefCell<u16>,
+    pub return_json: RefCell<JsonValue>,
+    thread: Option<thread::JoinHandle<()>>,
+    tx: mpsc::Sender<Command>,
+    rx: mpsc::Receiver<JsonValue>,
+}
+
+impl Context {
+    pub fn from_request(request: Request) -> Self {
+        let (tx, rx) = mpsc::channel::<Command>();
+        let (tx_b, rx_b) = mpsc::channel::<JsonValue>();
+        
+        let thread = thread::spawn(move || {
+            let ctx = LocalContext::from_request(request);
+
+            for command in rx.iter() {
+                match command {
+                    Command::EvaluateExpr(s) => {
+                        if tx_b.send(ctx.evaluate_expr(&s)).is_err() {
+                            return;
+                        };
+                    },
+                    Command::Exit => return,
+                };
+            }
+        });
+
+        Self { 
+            status_code: RefCell::new(200),
+            return_json: RefCell::new(JsonValue::Null),
+            thread: Some(thread), 
+            tx, 
+            rx: rx_b, 
+        }
+    }
+
+    pub fn get_return_value(&self) -> ReturnValue {
+        ReturnValue {
+            json: self.return_json.borrow().clone(),
+            status: self.status_code.borrow().clone(),
+        }
+    }
+
+    pub fn evaluate_expr(&self, expr: &str) -> JsonValue {
+        if self.tx.send(Command::EvaluateExpr(expr.to_string())).is_err() {
+            return JsonValue::Null;
+        };
+        self.rx.recv().unwrap_or(JsonValue::Null)
+    }
+}
+
+impl Drop for Context {
+    fn drop(&mut self) {
+        debug!("context is dropped");
+        self.tx.send(Command::Exit).ok();
+        if let Some(thread) = self.thread.take() {
+            thread.join().ok();
+        }
     }
 }
