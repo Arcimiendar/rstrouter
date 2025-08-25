@@ -1,0 +1,2 @@
+exit:
+  return: ${incoming.body}

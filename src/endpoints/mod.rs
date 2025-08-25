@@ -9,6 +9,7 @@ use crate::endpoints::route::get_route;
 
 pub mod parser;
 mod route;
+pub mod types;
 
 pub fn load_swagger(mut app: Router, collection: &EndpointsCollection) -> Router {
     app = app.merge(SwaggerUi::new("/docs").url("/docs/openapi.json", build_open_api(collection)));

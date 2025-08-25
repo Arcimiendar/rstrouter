@@ -1,9 +1,9 @@
-use axum::extract::Request;
 use axum::{http::StatusCode, response::IntoResponse};
 use serde_json::{Value as JsonValue, json};
 use serde_yaml_ng::Value as YmlValue;
 
 use crate::endpoints::parser::Endpoint;
+use crate::endpoints::types::Request;
 use crate::engine::context::Context;
 use crate::engine::tasks::produce_task;
 use crate::engine::tasks::task::Task;

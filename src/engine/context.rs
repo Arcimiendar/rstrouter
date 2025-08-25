@@ -1,4 +1,3 @@
-use axum::extract::Request;
 use boa_engine::{Context as JsContext, JsObject, JsString, JsValue, Source, property};
 use log::{debug, warn};
 use serde_json::{Value as JsonValue, json};
@@ -7,6 +6,8 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::mpsc;
 use std::thread;
+
+use crate::endpoints::types::Request;
 
 #[derive(Debug, Clone)]
 pub struct ReturnValue {
@@ -57,8 +58,8 @@ fn build_params(request: &Request, context: &mut JsContext) -> JsObject {
 }
 
 fn build_body(request: &Request, context: &mut JsContext) -> JsValue {
-    // TODO: implement it;
-    JsValue::Null
+    let body = request.body();
+    JsValue::from_json(body, context).unwrap_or(JsValue::Null)
 }
 
 fn build_incoming_from_request(request: Request, context: &mut JsContext) -> JsObject {
