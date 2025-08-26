@@ -4,7 +4,7 @@ use serde_json::{Value as JsonValue, json};
 use serde_urlencoded;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::sync::{mpsc, Mutex};
+use std::sync::{Mutex, mpsc};
 use std::thread;
 
 use crate::endpoints::types::Request;
@@ -198,16 +198,16 @@ impl Context {
                         if tx_b.send(Reply::Json(ctx.evaluate_expr(&s))).is_err() {
                             return;
                         };
-                    },
+                    }
                     Command::SetReturnValue(s, v) => {
                         *ctx.return_json.borrow_mut() = v;
                         *ctx.status_code.borrow_mut() = s;
-                    },
+                    }
                     Command::GetReturnValue => {
                         if tx_b.send(Reply::RetValue(ctx.get_return_value())).is_err() {
                             return;
                         }
-                    },
+                    }
                     Command::Exit => return,
                 };
             }
@@ -220,7 +220,6 @@ impl Context {
         }
     }
 
-
     pub fn evaluate_expr(&self, expr: &str) -> JsonValue {
         if self
             .tx
@@ -229,7 +228,8 @@ impl Context {
         {
             return JsonValue::Null;
         };
-        let obj = self.rx
+        let obj = self
+            .rx
             .lock()
             .ok()
             .and_then(|v| v.recv().ok())
@@ -238,29 +238,27 @@ impl Context {
         match obj {
             Reply::RetValue(_) => {
                 panic!("Something wrong with thread sync in context and localcontext");
-            },
-            Reply::Json(v) => v
-        }   
+            }
+            Reply::Json(v) => v,
+        }
     }
 
     pub fn get_return_value(&self) -> ReturnValue {
-        if self
-            .tx
-            .send(Command::GetReturnValue)
-            .is_err() {
+        if self.tx.send(Command::GetReturnValue).is_err() {
             panic!("Something wrong with thread sync in context and localcontext");
         };
-        let obj = self.rx
+        let obj = self
+            .rx
             .lock()
             .ok()
             .and_then(|v| v.recv().ok())
             .unwrap_or(Reply::Json(JsonValue::Null));
-        
+
         match obj {
             Reply::Json(_) => {
                 panic!("Something wrong with thread sync in context and localcontext");
-            },
-            Reply::RetValue(v) => v
+            }
+            Reply::RetValue(v) => v,
         }
     }
 
@@ -268,9 +266,14 @@ impl Context {
         if self
             .tx
             .send(Command::SetReturnValue(status_code, value))
-            .is_err() {
+            .is_err()
+        {
             panic!("Something wrong with thread sync in context and localcontext");
         }
+    }
+
+    pub fn wrap_js_code(code: &str) -> String {
+        format!("${{{}!}}", code)
     }
 }
 

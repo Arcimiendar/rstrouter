@@ -74,7 +74,7 @@ impl Task for Assign {
                 .iter()
                 .flat_map(|f| f.iter())
                 .map(|(k, v)| (k, v.to_string()))
-                .map(|(k, v)| format!("${{var {} = {};!}}", k, v))
+                .map(|(k, v)| Context::wrap_js_code(&format!("var {} = {};", k, v)))
                 .for_each(|expr| {
                     context.evaluate_expr(&expr);
                 });

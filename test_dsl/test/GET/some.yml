@@ -1,6 +1,7 @@
 init: 
   assign:
     x: ${1}
+    repeat: ${incoming.headers.repeat || 10}
 
 
 inc:
@@ -9,7 +10,7 @@ inc:
 
 cond:
   switch:
-    - condition: ${x > 10}
+    - condition: ${x > repeat}
       next: toReturn
   next: inc
 

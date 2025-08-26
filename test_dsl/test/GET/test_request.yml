@@ -1,0 +1,11 @@
+
+getRequest: 
+  call: http.get
+  args:
+    url: http://localhost:8090/test/some
+    headers:
+      repeat: 12
+  result: ok
+
+returnSuccess:
+  return: ${ok.response.body.response}
