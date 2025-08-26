@@ -2,7 +2,6 @@ use crate::engine::context::Context;
 use crate::engine::tasks::task::{ExecutionResult, Task, TaskFactory, render_obj};
 
 use async_trait::async_trait;
-use log::warn;
 use serde_yaml_ng::Value as YmlValue;
 
 #[derive(Debug)]
