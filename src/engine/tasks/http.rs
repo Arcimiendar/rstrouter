@@ -7,7 +7,7 @@ use serde_json::{Value as JsonValue, json};
 use std::{collections::HashMap, str::FromStr};
 
 use crate::engine::context::Context;
-use crate::engine::tasks::task::{ExecutionResult, Task, TaskFactory};
+use crate::engine::tasks::task::{ExecutionResult, Task, TaskFactory, render_obj};
 
 use async_trait::async_trait;
 use serde_yaml_ng::Value as YmlValue;
@@ -65,33 +65,9 @@ impl HttpArgs {
             .collect()
     }
 
-    fn render_body_internal(&self, yml: &YmlValue, context: &Context) -> JsonValue {
-        match yml {
-            YmlValue::Bool(v) => JsonValue::Bool(v.clone()),
-            YmlValue::Mapping(m) => JsonValue::Object(
-                m.iter()
-                    .flat_map(|(k, v)| {
-                        Some((
-                            k.as_str()?.to_string(),
-                            self.render_body_internal(v, context),
-                        ))
-                    })
-                    .collect(),
-            ),
-            YmlValue::Null => JsonValue::Null,
-            YmlValue::Number(v) => serde_json::to_value(v).unwrap_or(JsonValue::Null),
-            YmlValue::Sequence(v) => JsonValue::Array(
-                v.iter()
-                    .map(|el| self.render_body_internal(el, context))
-                    .collect(),
-            ),
-            YmlValue::String(s) => context.evaluate_expr(s),
-            YmlValue::Tagged(_) => JsonValue::Null, // not supported by JSON
-        }
-    }
 
     fn render_body(&self, context: &Context) -> JsonValue {
-        self.render_body_internal(&self.body, context)
+        render_obj(&self.body, context)
     }
 
     async fn render_response(&self, response: Response) -> JsonValue {

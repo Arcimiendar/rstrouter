@@ -8,4 +8,5 @@ getRequest:
   result: ok
 
 returnSuccess:
-  return: ${ok.response.body.response}
+  return: 
+    ok: ${ok.response.body.response}

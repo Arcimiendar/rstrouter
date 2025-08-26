@@ -1,4 +1,6 @@
 use async_trait::async_trait;
+use log::warn;
+use serde_json::Value as JsonValue;
 use std::fmt::Debug;
 
 use serde_yaml_ng::Value as YmlValue;
@@ -39,5 +41,39 @@ pub trait TaskFactory: Debug {
             }
         }
         return None;
+    }
+}
+
+
+pub fn render_obj(yml: &YmlValue, context: &Context) -> JsonValue {
+    match yml {
+        YmlValue::Bool(v) => JsonValue::Bool(v.clone()),
+        YmlValue::Mapping(m) => JsonValue::Object(
+            m.iter()
+                .flat_map(|(k, v)| {
+                    Some((
+                        k.as_str()?.to_string(),
+                        render_obj(v, context),
+                    ))
+                })
+                .collect(),
+        ),
+        YmlValue::Null => JsonValue::Null,
+        YmlValue::Number(v) => {
+            serde_json::to_value(v).map_err(|e| {
+                warn!("can't cast {:?} number to json: {}", v, e);
+                e
+            }).unwrap_or(JsonValue::Null)
+        },
+        YmlValue::Sequence(v) => JsonValue::Array(
+            v.iter()
+                .map(|el| render_obj(el, context))
+                .collect(),
+        ),
+        YmlValue::String(s) => context.evaluate_expr(s),
+        YmlValue::Tagged(_) => {
+            warn!("Tags not supported by json: {:?}", yml);
+            JsonValue::Null
+        } // not supported by JSON
     }
 }
