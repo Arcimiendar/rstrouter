@@ -3,6 +3,7 @@ use serde_yaml_ng::Value as YmlValue;
 use crate::engine::tasks::assign::AssignFactory;
 use crate::engine::tasks::declaration::DeclarationFactory;
 use crate::engine::tasks::http::HttpFactory;
+use crate::engine::tasks::mock::MockFactory;
 use crate::engine::tasks::ret::RetFactory;
 use crate::engine::tasks::switch::SwitchFactory;
 use crate::engine::tasks::task::{Task, TaskFactory};
@@ -10,6 +11,7 @@ use crate::engine::tasks::task::{Task, TaskFactory};
 mod assign;
 mod declaration;
 mod http;
+mod mock;
 mod ret;
 mod switch;
 pub mod task;
@@ -21,6 +23,7 @@ pub fn produce_task(task_name: &str, global_value: &YmlValue) -> Option<Box<dyn 
         Box::new(AssignFactory::new()),
         Box::new(SwitchFactory::new()),
         Box::new(HttpFactory::new()),
+        Box::new(MockFactory::new()),
     ];
 
     factories

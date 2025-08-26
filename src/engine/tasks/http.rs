@@ -65,7 +65,6 @@ impl HttpArgs {
             .collect()
     }
 
-
     fn render_body(&self, context: &Context) -> JsonValue {
         render_obj(&self.body, context)
     }
