@@ -1,8 +1,6 @@
 use crate::engine::context::Context;
-use crate::engine::tasks::task::{ExecutionResult, Task, TaskFactory};
+use crate::engine::tasks::task::{ExecutionResult, Task, TaskFactory, render_obj};
 use async_trait::async_trait;
-use log::warn;
-use serde_json::Value as JsonValue;
 use serde_yaml_ng::Value as YmlValue;
 
 #[derive(Debug)]
@@ -36,51 +34,19 @@ impl AssignFactory {
     }
 }
 
-impl Assign {
-    fn render_inner_strings(&self, value: &JsonValue, context: &mut Context) -> JsonValue {
-        if let Some(v) = value.as_str() {
-            return context.evaluate_expr(v);
-        }
-
-        if let Some(m) = value.as_object() {
-            let new_m = m
-                .iter()
-                .map(|(k, v)| (k.to_string(), self.render_inner_strings(v, context)))
-                .collect();
-
-            return JsonValue::Object(new_m);
-        }
-
-        if let Some(a) = value.as_array() {
-            let new_a: Vec<JsonValue> = a
-                .iter()
-                .map(|v| self.render_inner_strings(v, context))
-                .collect();
-
-            return JsonValue::Array(new_a);
-        }
-        // other types does not require any js evaluation
-        value.clone()
-    }
-}
-
 #[async_trait]
 impl Task for Assign {
-    async fn execute(&self, mut context: Context) -> ExecutionResult {
-        if let Ok(v) = serde_json::to_value(&self.assign_expr) {
-            let rendered = self.render_inner_strings(&v, &mut context);
-            rendered
-                .as_object()
-                .iter()
-                .flat_map(|f| f.iter())
-                .map(|(k, v)| (k, v.to_string()))
-                .map(|(k, v)| Context::wrap_js_code(&format!("var {} = {};", k, v)))
-                .for_each(|expr| {
-                    context.evaluate_expr(&expr);
-                });
-        } else {
-            warn!("Incorrect assign value in {}", self.get_name());
-        }
+    async fn execute(&self, context: Context) -> ExecutionResult {
+        let rendered = render_obj(&self.assign_expr, &context);
+        rendered
+            .as_object()
+            .iter()
+            .flat_map(|f| f.iter())
+            .map(|(k, v)| (k, v.to_string()))
+            .map(|(k, v)| Context::wrap_js_code(&format!("var {} = {};", k, v)))
+            .for_each(|expr| {
+                context.evaluate_expr(&expr);
+            });
 
         ExecutionResult(context, self.next_task.clone())
     }

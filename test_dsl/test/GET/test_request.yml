@@ -4,7 +4,7 @@ getRequest:
   args:
     url: http://localhost:8090/test/some
     headers:
-      repeat: 12
+      repeat: "12"
   result: ok
 
 returnSuccess:
