@@ -45,8 +45,7 @@ impl RetFactory {
 impl Task for Ret {
     async fn execute(&self, context: Context) -> ExecutionResult {
         let return_value = context.evaluate_expr(&self.return_expr);
-        *context.return_json.borrow_mut() = return_value;
-        *context.status_code.borrow_mut() = self.status_code;
+        context.set_return_value(self.status_code, return_value);
 
         ExecutionResult(context, self.next_task.clone())
     }

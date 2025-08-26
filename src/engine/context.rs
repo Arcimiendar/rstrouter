@@ -4,7 +4,7 @@ use serde_json::{Value as JsonValue, json};
 use serde_urlencoded;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::sync::mpsc;
+use std::sync::{mpsc, Mutex};
 use std::thread;
 
 use crate::endpoints::types::Request;
@@ -28,6 +28,8 @@ pub struct ReturnValue {
 #[derive(Debug)]
 pub struct LocalContext {
     pub context: RefCell<JsContext>,
+    pub status_code: RefCell<u16>,
+    pub return_json: RefCell<JsonValue>,
 }
 
 fn build_headers(request: &Request, context: &mut JsContext) -> JsObject {
@@ -101,7 +103,16 @@ impl LocalContext {
             .register_global_property(JsString::from("incoming"), obj, property::Attribute::all())
             .ok();
         Self {
+            status_code: RefCell::new(200),
+            return_json: RefCell::new(JsonValue::Null),
             context: RefCell::new(context),
+        }
+    }
+
+    pub fn get_return_value(&self) -> ReturnValue {
+        ReturnValue {
+            json: self.return_json.borrow().clone(),
+            status: self.status_code.borrow().clone(),
         }
     }
 
@@ -157,21 +168,26 @@ impl LocalContext {
 enum Command {
     EvaluateExpr(String),
     Exit,
+    SetReturnValue(u16, JsonValue),
+    GetReturnValue,
+}
+
+enum Reply {
+    Json(JsonValue),
+    RetValue(ReturnValue),
 }
 
 #[derive(Debug)]
 pub struct Context {
-    pub status_code: RefCell<u16>,
-    pub return_json: RefCell<JsonValue>,
     thread: Option<thread::JoinHandle<()>>,
     tx: mpsc::Sender<Command>,
-    rx: mpsc::Receiver<JsonValue>,
+    rx: Mutex<mpsc::Receiver<Reply>>,
 }
 
 impl Context {
     pub fn from_request(request: Request) -> Self {
         let (tx, rx) = mpsc::channel::<Command>();
-        let (tx_b, rx_b) = mpsc::channel::<JsonValue>();
+        let (tx_b, rx_b) = mpsc::channel::<Reply>();
 
         let thread = thread::spawn(move || {
             let ctx = LocalContext::from_request(request);
@@ -179,30 +195,31 @@ impl Context {
             for command in rx.iter() {
                 match command {
                     Command::EvaluateExpr(s) => {
-                        if tx_b.send(ctx.evaluate_expr(&s)).is_err() {
+                        if tx_b.send(Reply::Json(ctx.evaluate_expr(&s))).is_err() {
                             return;
                         };
-                    }
+                    },
+                    Command::SetReturnValue(s, v) => {
+                        *ctx.return_json.borrow_mut() = v;
+                        *ctx.status_code.borrow_mut() = s;
+                    },
+                    Command::GetReturnValue => {
+                        if tx_b.send(Reply::RetValue(ctx.get_return_value())).is_err() {
+                            return;
+                        }
+                    },
                     Command::Exit => return,
                 };
             }
         });
 
         Self {
-            status_code: RefCell::new(200),
-            return_json: RefCell::new(JsonValue::Null),
             thread: Some(thread),
             tx,
-            rx: rx_b,
+            rx: Mutex::new(rx_b),
         }
     }
 
-    pub fn get_return_value(&self) -> ReturnValue {
-        ReturnValue {
-            json: self.return_json.borrow().clone(),
-            status: self.status_code.borrow().clone(),
-        }
-    }
 
     pub fn evaluate_expr(&self, expr: &str) -> JsonValue {
         if self
@@ -212,7 +229,48 @@ impl Context {
         {
             return JsonValue::Null;
         };
-        self.rx.recv().unwrap_or(JsonValue::Null)
+        let obj = self.rx
+            .lock()
+            .ok()
+            .and_then(|v| v.recv().ok())
+            .unwrap_or(Reply::Json(JsonValue::Null));
+
+        match obj {
+            Reply::RetValue(_) => {
+                panic!("Something wrong with thread sync in context and localcontext");
+            },
+            Reply::Json(v) => v
+        }   
+    }
+
+    pub fn get_return_value(&self) -> ReturnValue {
+        if self
+            .tx
+            .send(Command::GetReturnValue)
+            .is_err() {
+            panic!("Something wrong with thread sync in context and localcontext");
+        };
+        let obj = self.rx
+            .lock()
+            .ok()
+            .and_then(|v| v.recv().ok())
+            .unwrap_or(Reply::Json(JsonValue::Null));
+        
+        match obj {
+            Reply::Json(_) => {
+                panic!("Something wrong with thread sync in context and localcontext");
+            },
+            Reply::RetValue(v) => v
+        }
+    }
+
+    pub fn set_return_value(&self, status_code: u16, value: JsonValue) {
+        if self
+            .tx
+            .send(Command::SetReturnValue(status_code, value))
+            .is_err() {
+            panic!("Something wrong with thread sync in context and localcontext");
+        }
     }
 }
 

@@ -1,5 +1,7 @@
-use core::task;
+use log::warn;
+use reqwest::{RequestBuilder, header::HeaderMap, Response};
 use std::collections::HashMap;
+use serde_json::Value as JsonValue;
 
 use crate::engine::context::Context;
 use crate::engine::tasks::task::{ExecutionResult, Task, TaskFactory};
@@ -17,18 +19,67 @@ pub enum HttpMethod {
     Post,
     Put,
     Delete,
-    Connect,
-    Options,
-    Trace,
     Patch,
 }
 
+impl HttpMethod {
+    fn to_request_builder(&self, url: &str) -> RequestBuilder {
+        let client = reqwest::Client::new();
+        match self {
+            Self::Get => client.get(url),
+            Self::Post => client.post(url),
+            Self::Head => client.head(url),
+            Self::Delete => client.delete(url),
+            Self::Patch => client.patch(url),
+            Self::Put => client.put(url),
+        }
+    }
+}
+
+
 #[derive(Debug)]
 pub struct HttpArgs {
+    url: String,
     method: HttpMethod,
     headers: HashMap<String, String>,
     query: HashMap<String, String>,
     body: YmlValue,
+}
+
+impl HttpArgs {
+    fn render_headers(&self, context: &Context) -> HeaderMap {
+        todo!()
+    }
+
+    fn render_query(&self, context: &Context) -> HashMap<String, String> {
+        todo!()
+    }
+
+    fn render_body(&self, context: &Context) -> JsonValue {
+        todo!()
+    }
+
+    async fn render_response(&self, response: Response) -> JsonValue {
+        todo!();
+    }
+
+    async fn do_request(&self, context: &Context) -> JsonValue {
+        let request_result = self.method
+            .to_request_builder(&self.url)
+            .headers(self.render_headers(&context))
+            .query(&self.render_query(context))
+            .json(&self.render_body(context))
+            .send()
+            .await;
+        
+        let Ok(response) = request_result else {
+            warn!("request to {} failed", &self.url);
+            return JsonValue::Null;
+        };
+
+                
+        self.render_response(response).await
+    } 
 }
 
 #[derive(Debug)]
@@ -58,9 +109,6 @@ impl HttpFactory {
             "post" => HttpMethod::Post,
             "put" => HttpMethod::Put,
             "delete" => HttpMethod::Delete,
-            "connect" => HttpMethod::Connect,
-            "options" => HttpMethod::Options,
-            "trace" => HttpMethod::Trace,
             "patch" => HttpMethod::Patch,
             _ => return None,
         };
@@ -69,6 +117,11 @@ impl HttpFactory {
     }
 
     fn parse_http_args(&self, yml: &YmlValue, method: HttpMethod) -> Option<HttpArgs> {
+        let url = yml
+            .get("url")
+            .and_then(|v| v.as_str())?
+            .to_string();
+
         let headers = yml
             .get("headers")
             .iter()
@@ -90,6 +143,7 @@ impl HttpFactory {
         let body = yml.get("body").map(|y| y.clone()).unwrap_or(YmlValue::Null);
 
         Some(HttpArgs {
+            url,
             method,
             headers,
             query,
@@ -123,7 +177,13 @@ impl TaskFactory for HttpFactory {
 impl Task for Http {
     async fn execute(&self, context: Context) -> ExecutionResult {
         // todo! implement it
-
+        let response = self.args.do_request(&context).await;
+        
+        if let Some(result_name) = &self.result {
+            context.evaluate_expr(
+                &format!("var {} = {}", result_name, response.to_string())
+            );
+        }
         ExecutionResult(context, self.next_task.clone())
     }
 
