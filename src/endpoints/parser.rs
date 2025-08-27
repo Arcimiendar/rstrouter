@@ -91,6 +91,7 @@ impl Endpoint {
             .flat_map(|r| r.into_iter())
             .flat_map(|e| e.ok())
             .filter(|e| e.path().is_dir())
+            .filter(|e| !e.path().ends_with("TEMPLATES"))
             .map(|e| {
                 let method = if e.path().ends_with("GET") {
                     ApiEndpointMethod::Get

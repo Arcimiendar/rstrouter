@@ -1,6 +1,8 @@
+use std::{collections::HashMap, error::Error, str::FromStr};
+
 use axum::{
     extract::{FromRequest, Json, Request as AxumRequest},
-    http::{HeaderMap, Uri},
+    http::{HeaderMap, HeaderName, HeaderValue, Uri},
 };
 use serde_json::Value as JsonValue;
 
@@ -25,6 +27,26 @@ impl Request {
             r_header: headers,
             r_body: js_val,
         }
+    }
+
+    pub fn new(
+        headers: HashMap<String, String>,
+        body: JsonValue,
+        uri: &str,
+    ) -> Result<Self, Box<dyn Error>> {
+        Ok(Self {
+            r_uri: Uri::from_str(uri)?,
+            r_header: headers
+                .iter()
+                .flat_map(|(k, v)| {
+                    Some((
+                        HeaderName::from_str(k).ok()?,
+                        HeaderValue::from_str(v).ok()?,
+                    ))
+                })
+                .collect(),
+            r_body: body,
+        })
     }
 
     pub fn headers(&self) -> &HeaderMap {

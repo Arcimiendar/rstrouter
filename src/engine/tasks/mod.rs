@@ -7,6 +7,7 @@ use crate::engine::tasks::mock::MockFactory;
 use crate::engine::tasks::ret::RetFactory;
 use crate::engine::tasks::switch::SwitchFactory;
 use crate::engine::tasks::task::{Task, TaskFactory};
+use crate::engine::tasks::template::TemplateFactory;
 
 mod assign;
 mod declaration;
@@ -15,6 +16,7 @@ mod mock;
 mod ret;
 mod switch;
 pub mod task;
+mod template;
 
 pub fn produce_task(task_name: &str, global_value: &YmlValue) -> Option<Box<dyn Task>> {
     let factories: Vec<Box<dyn TaskFactory>> = vec![
@@ -24,6 +26,7 @@ pub fn produce_task(task_name: &str, global_value: &YmlValue) -> Option<Box<dyn 
         Box::new(SwitchFactory::new()),
         Box::new(HttpFactory::new()),
         Box::new(MockFactory::new()),
+        Box::new(TemplateFactory::new()),
     ];
 
     factories

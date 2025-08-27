@@ -85,6 +85,13 @@ impl Engine {
         }
     }
 
+    pub fn from_template(template: &YmlValue) -> Self {
+        Self {
+            guards: vec![],
+            tree: TaskTree::from_yml(&template),
+        }
+    }
+
     pub async fn execute(&self, request: Request) -> EngineResponse {
         let mut context = Context::from_request(request);
         for guard in &self.guards {
