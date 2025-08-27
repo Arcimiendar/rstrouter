@@ -56,3 +56,217 @@ impl Task for Ret {
         &self.name
     }
 }
+
+#[cfg(test)]
+mod test {
+    use std::collections::HashMap;
+
+    use crate::{
+        endpoints::types::Request,
+        engine::{
+            context::Context,
+            tasks::{ret::RetFactory, task::TaskFactory},
+        },
+    };
+    use serde_json::Value as JsonValue;
+    use serde_yaml_ng::Value as YmlValue;
+
+    #[test]
+    fn factory_returns_none() {
+        let factory = RetFactory::new();
+        let value = factory.from_yml(
+            "test",
+            &serde_yaml_ng::from_str(
+                r#"
+                    test:
+                      assign:
+                        a: b
+                "#,
+            )
+            .unwrap_or(YmlValue::Null),
+        );
+        assert!(value.is_none());
+    }
+
+    #[test]
+    fn factory_returns_task() {
+        let factory = RetFactory::new();
+        let value = factory.from_yml(
+            "test",
+            &serde_yaml_ng::from_str(
+                r#"
+                    test:
+                      return: ok
+                "#,
+            )
+            .unwrap_or(YmlValue::Null),
+        );
+        assert!(value.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_default_return_status_code() {
+        let factory = RetFactory::new();
+        let task = factory
+            .from_yml(
+                "test",
+                &serde_yaml_ng::from_str(
+                    r#"
+                        test:
+                          return: ok
+                    "#,
+                )
+                .unwrap_or(YmlValue::Null),
+            )
+            .unwrap();
+
+        let context = Context::from_request(
+            Request::new(
+                HashMap::new(),
+                JsonValue::Null,
+                "http://localhost:8090/test",
+            )
+            .unwrap(),
+        );
+
+        let res = task.execute(context).await;
+        let res_v = res.0.get_return_value();
+        assert_eq!(res_v.status, 200);
+    }
+
+    #[tokio::test]
+    async fn test_custom_return_status_code() {
+        let factory = RetFactory::new();
+        let task = factory
+            .from_yml(
+                "test",
+                &serde_yaml_ng::from_str(
+                    r#"
+                        test:
+                          return: ok
+                          status: 201
+                    "#,
+                )
+                .unwrap_or(YmlValue::Null),
+            )
+            .unwrap();
+
+        let context = Context::from_request(
+            Request::new(
+                HashMap::new(),
+                JsonValue::Null,
+                "http://localhost:8090/test",
+            )
+            .unwrap(),
+        );
+
+        let res = task.execute(context).await;
+        let res_v = res.0.get_return_value();
+        assert_eq!(res_v.status, 201);
+    }
+
+    #[tokio::test]
+    async fn test_return_value() {
+        let factory = RetFactory::new();
+        let task = factory
+            .from_yml(
+                "test",
+                &serde_yaml_ng::from_str(
+                    r#"
+                        test:
+                          return: ${some}
+                    "#,
+                )
+                .unwrap_or(YmlValue::Null),
+            )
+            .unwrap();
+
+        let context = Context::from_request(
+            Request::new(
+                HashMap::new(),
+                JsonValue::Null,
+                "http://localhost:8090/test",
+            )
+            .unwrap(),
+        );
+
+        context.evaluate_expr(&Context::wrap_js_code("var some = {a: '123'};"));
+
+        let res = task.execute(context).await;
+        let res_v = res.0.get_return_value();
+        assert_eq!(
+            res_v
+                .json
+                .as_object()
+                .unwrap()
+                .get("a")
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "123"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_return_complex_value() {
+        let factory = RetFactory::new();
+        let task = factory
+            .from_yml(
+                "test",
+                &serde_yaml_ng::from_str(
+                    r#"
+                        test:
+                          return: 
+                            - ${some}
+                            - 2
+                            - some: ${some}
+                    "#,
+                )
+                .unwrap_or(YmlValue::Null),
+            )
+            .unwrap();
+
+        let context = Context::from_request(
+            Request::new(
+                HashMap::new(),
+                JsonValue::Null,
+                "http://localhost:8090/test",
+            )
+            .unwrap(),
+        );
+
+        context.evaluate_expr(&Context::wrap_js_code("var some = {a: '123'};"));
+
+        let res = task.execute(context).await;
+        let res_v = res.0.get_return_value();
+        let arr = res_v.json.as_array().unwrap();
+        assert_eq!(arr.len(), 3);
+        for (i, el) in arr.iter().enumerate() {
+            if i == 0 {
+                assert_eq!(
+                    el.as_object().unwrap().get("a").unwrap().as_str().unwrap(),
+                    "123"
+                );
+            }
+            if i == 1 {
+                assert_eq!(el.as_i64().unwrap(), 2);
+            }
+            if i == 2 {
+                assert_eq!(
+                    el.as_object()
+                        .unwrap()
+                        .get("some")
+                        .unwrap()
+                        .get("a")
+                        .unwrap()
+                        .as_str()
+                        .unwrap(),
+                    "123"
+                );
+            }
+            if i >= 3 {
+                panic!("array had to be smaller");
+            }
+        }
+    }
+}

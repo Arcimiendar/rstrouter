@@ -76,7 +76,7 @@ mod test {
 
     #[test]
     fn test_validate_log_config() {
-        assert!(validate_log_config("./dummy.rs").is_ok());
+        assert!(validate_log_config("./dummy.json").is_ok());
         assert!(validate_log_config("./not_exists.json").is_err());
         assert!(validate_log_config("./test_dsl").is_err());
     }
