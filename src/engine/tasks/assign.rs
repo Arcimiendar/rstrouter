@@ -1,6 +1,7 @@
 use crate::engine::context::Context;
 use crate::engine::tasks::task::{ExecutionResult, Task, TaskFactory, render_obj};
 use async_trait::async_trait;
+use log::warn;
 use serde_yaml_ng::Value as YmlValue;
 
 #[derive(Debug)]
@@ -17,6 +18,13 @@ impl TaskFactory for AssignFactory {
     fn from_yml(&self, task_name: &str, yml: &YmlValue) -> Option<Box<dyn Task>> {
         let task_body = yml.get(task_name)?;
         let assign_exprs = task_body.get("assign")?;
+        if !assign_exprs.is_mapping() {
+            warn!(
+                "Assign task has bad syntax. Must be mapping in task {}",
+                task_name
+            );
+            return None;
+        }
 
         let next_task = self.get_next_task(task_name, yml);
 
@@ -53,5 +61,97 @@ impl Task for Assign {
 
     fn get_name(&self) -> &str {
         &self.name
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::collections::HashMap;
+    use crate::{
+        endpoints::types::Request,
+        engine::{
+            context::Context,
+            tasks::{assign::AssignFactory, task::TaskFactory},
+        },
+    };
+    use serde_json::Value as JsonValue;
+
+    #[test]
+    fn test_task_is_not_parsed() {
+        let factory = AssignFactory::new();
+
+        let obj = factory.from_yml(
+            "test",
+            &serde_yaml_ng::from_str(
+                r#"
+                    test:
+                      assign:
+                        - 1
+                        - 2
+                        - 3
+                "#,
+            )
+            .unwrap(),
+        );
+
+        assert!(obj.is_none());
+
+        let obj = factory.from_yml(
+            "test",
+            &serde_yaml_ng::from_str(
+                r#"
+                    test:
+                      return: 0
+                "#,
+            )
+            .unwrap(),
+        );
+
+        assert!(obj.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_assign_task() {
+        let factory = AssignFactory::new();
+
+        let obj = factory.from_yml(
+            "test",
+            &serde_yaml_ng::from_str(
+                r#"
+                    test:
+                      assign:
+                        var_name: some string
+                        var_rendered: ${1 + 3}
+                        var_rendered2: some string ${1 + 3}
+                        var_rendered3:
+                            a: 5
+                "#,
+            )
+            .unwrap(),
+        );
+
+        assert!(obj.is_some());
+
+        let task = obj.unwrap();
+
+        let context = Context::from_request(
+            Request::new(
+                HashMap::new(),
+                JsonValue::Null,
+                "http://localhost:8090/test",
+            )
+            .unwrap(),
+        );
+
+        let res = task.execute(context).await;
+        let ctx = res.0;
+        let v = ctx.evaluate_expr("${var_name}");
+        assert_eq!(v.as_str().unwrap(), "some string");
+        let v = ctx.evaluate_expr("${var_rendered}");
+        assert_eq!(v.as_u64().unwrap(), 4);
+        let v = ctx.evaluate_expr("${var_rendered2}");
+        assert_eq!(v.as_str().unwrap(), "some string 4");
+        let v = ctx.evaluate_expr("${var_rendered3}");
+        assert_eq!(v.get("a").unwrap().as_u64().unwrap(), 5);
     }
 }
