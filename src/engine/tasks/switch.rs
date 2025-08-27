@@ -80,3 +80,81 @@ impl Task for Switch {
         &self.name
     }
 }
+
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        endpoints::types::Request,
+        engine::{
+            context::Context,
+            tasks::{switch::SwitchFactory, task::TaskFactory},
+        },
+    };
+    use serde_json::Value as JsonValue;
+    use serde_yaml_ng::Value as YmlValue;
+    use std::collections::HashMap;
+
+    #[test]
+    fn factory_returns_none() {
+        let factory = SwitchFactory::new();
+        let value = factory.from_yml(
+            "test",
+            &serde_yaml_ng::from_str(
+                r#"
+                    test:
+                      switch:
+                        incorrect: condition
+                "#,
+            )
+            .unwrap()
+        );
+
+        assert!(value.is_none())
+    }
+
+
+    #[tokio::test]
+    async fn test_switch_condition() {
+        let factory = SwitchFactory::new();
+        let task = factory
+            .from_yml(
+                "test",
+                &serde_yaml_ng::from_str(
+                    r#"
+                        test:
+                          switch:
+                            - condition: ${some === 1}
+                              next: one
+                            - condition: ${some === 2}
+                              next: two
+                            - condition: ${incorrect}
+                          next: third
+                    "#,
+                )
+                .unwrap_or(YmlValue::Null),
+            )
+            .unwrap();
+
+        let context = Context::from_request(
+            Request::new(
+                HashMap::new(),
+                JsonValue::Null,
+                "http://localhost:8090/test",
+            )
+            .unwrap(),
+        );
+
+        context.evaluate_expr(&Context::wrap_js_code("var some = 1;"));
+        let res = task.execute(context).await;
+        assert_eq!(res.1.unwrap(), "one");
+
+        res.0.evaluate_expr(&Context::wrap_js_code("var some = 2;"));
+        let res = task.execute(res.0).await;
+        assert_eq!(res.1.unwrap(), "two");
+
+        res.0.evaluate_expr(&Context::wrap_js_code("var some = 3;"));
+        let res = task.execute(res.0).await;
+        assert_eq!(res.1.unwrap(), "third");
+    }
+}

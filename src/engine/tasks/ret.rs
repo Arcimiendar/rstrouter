@@ -69,7 +69,6 @@ mod test {
         },
     };
     use serde_json::Value as JsonValue;
-    use serde_yaml_ng::Value as YmlValue;
 
     #[test]
     fn factory_returns_none() {
@@ -83,7 +82,7 @@ mod test {
                         a: b
                 "#,
             )
-            .unwrap_or(YmlValue::Null),
+            .unwrap(),
         );
         assert!(value.is_none());
     }
@@ -99,7 +98,7 @@ mod test {
                       return: ok
                 "#,
             )
-            .unwrap_or(YmlValue::Null),
+            .unwrap(),
         );
         assert!(value.is_some());
     }
@@ -116,7 +115,7 @@ mod test {
                           return: ok
                     "#,
                 )
-                .unwrap_or(YmlValue::Null),
+                .unwrap(),
             )
             .unwrap();
 
@@ -147,7 +146,7 @@ mod test {
                           status: 201
                     "#,
                 )
-                .unwrap_or(YmlValue::Null),
+                .unwrap(),
             )
             .unwrap();
 
@@ -177,7 +176,7 @@ mod test {
                           return: ${some}
                     "#,
                 )
-                .unwrap_or(YmlValue::Null),
+                .unwrap(),
             )
             .unwrap();
 
@@ -222,7 +221,7 @@ mod test {
                             - some: ${some}
                     "#,
                 )
-                .unwrap_or(YmlValue::Null),
+                .unwrap(),
             )
             .unwrap();
 

@@ -191,7 +191,6 @@ impl TaskFactory for HttpFactory {
 #[async_trait]
 impl Task for Http {
     async fn execute(&self, context: Context) -> ExecutionResult {
-        // todo! implement it
         let response = self.args.do_request(&context).await;
 
         if let Some(result_name) = &self.result {
