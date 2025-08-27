@@ -7,5 +7,6 @@ services:
       - "8090:8090"
     environment:
       - BIND=0.0.0.0
+      - TEST_ENV=some-test-env-to-use-in-tasks
     volumes:
       - ./test_dsl:/DSL

@@ -1,4 +1,5 @@
 declaration: 
+  call: declare
   description: "test get"
 
 task:

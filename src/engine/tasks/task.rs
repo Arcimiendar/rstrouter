@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use log::warn;
 use serde_json::Value as JsonValue;
+use std::env;
 use std::fmt::Debug;
 
 use serde_yaml_ng::Value as YmlValue;
@@ -67,5 +68,53 @@ pub fn render_obj(yml: &YmlValue, context: &Context) -> JsonValue {
             warn!("Tags not supported by json: {:?}", yml);
             JsonValue::Null
         } // not supported by JSON
+    }
+}
+
+fn get_env_var(var_name: &str) -> String {
+    match env::var(var_name) {
+        Ok(s) => s,
+        Err(_) => "".to_string(),
+    }
+}
+
+fn fill_env_vars(value: &str) -> String {
+    let mut current_str = value;
+    let mut collected_str = String::with_capacity(value.len() * 10); // extra capacity to avoid realocations
+
+    let mut cond = true;
+
+    while cond {
+        if let Some((begin, end)) = current_str.split_once("[#") {
+            collected_str.push_str(begin);
+
+            if let Some((env_var, rest)) = end.split_once("]") {
+                collected_str.push_str(&get_env_var(env_var));
+                current_str = rest;
+            } else {
+                collected_str.push_str("[#");
+                collected_str.push_str(end);
+                cond = false;
+            }
+        } else {
+            collected_str.push_str(current_str);
+            cond = false;
+        }
+    }
+    collected_str.clone() // clone to remove excess mem usage
+}
+
+pub fn preprocess_obj(yml: &YmlValue) -> YmlValue {
+    match yml {
+        YmlValue::Mapping(m) => YmlValue::Mapping(
+            m.iter()
+                .map(|(k, yml)| (preprocess_obj(k), preprocess_obj(yml)))
+                .collect(),
+        ),
+        YmlValue::Sequence(seq) => {
+            YmlValue::Sequence(seq.iter().map(|yml| preprocess_obj(yml)).collect())
+        }
+        YmlValue::String(s) => YmlValue::String(fill_env_vars(s)),
+        others => others.clone(),
     }
 }

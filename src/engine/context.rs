@@ -116,11 +116,6 @@ impl LocalContext {
         }
     }
 
-    fn substitute_template(&self, expr: String) -> String {
-        // TODO: implememnt this
-        expr
-    }
-
     fn execute_js_signle_line(&self, expr: &str) -> JsonValue {
         let mut context = self.context.borrow_mut();
         let s = format!("JSON.stringify({})", expr);
@@ -147,11 +142,7 @@ impl LocalContext {
     }
 
     pub fn evaluate_expr(&self, expr: &str) -> JsonValue {
-        let mut expr_copy = expr.to_string();
-
-        if expr_copy.contains("#[") && expr_copy.contains("#]") {
-            expr_copy = self.substitute_template(expr_copy);
-        }
+        let expr_copy = expr.to_string();
 
         if expr_copy.starts_with("${") && expr_copy.ends_with("}") {
             return self.execute_js_signle_line(&expr_copy[2..expr_copy.len() - 1]);

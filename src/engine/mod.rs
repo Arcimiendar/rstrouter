@@ -6,7 +6,7 @@ use crate::endpoints::parser::Endpoint;
 use crate::endpoints::types::Request;
 use crate::engine::context::Context;
 use crate::engine::tasks::produce_task;
-use crate::engine::tasks::task::Task;
+use crate::engine::tasks::task::{Task, preprocess_obj};
 
 mod context;
 mod tasks;
@@ -18,14 +18,15 @@ struct TaskTree {
 
 impl TaskTree {
     fn from_yml(yml: &YmlValue) -> Self {
-        let Some(mapping) = yml.as_mapping() else {
+        let preprocessed_yml = preprocess_obj(yml);
+        let Some(mapping) = preprocessed_yml.as_mapping() else {
             return Self { tasks: vec![] };
         };
 
         let tasks: Vec<Box<dyn Task>> = mapping
             .keys()
             .flat_map(|k| Some(k.as_str()?))
-            .flat_map(|k| produce_task(k, yml))
+            .flat_map(|k| produce_task(k, &preprocessed_yml))
             .collect();
 
         Self { tasks: tasks }

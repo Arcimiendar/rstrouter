@@ -10,3 +10,4 @@ getRequest:
 returnSuccess:
   return: 
     ok: ${ok.response.body.response}
+    env: "[#TEST_ENV]"

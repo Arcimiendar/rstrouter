@@ -18,7 +18,7 @@ pub struct Ret {
 impl TaskFactory for RetFactory {
     fn from_yml(&self, task_name: &str, yml: &serde_yaml_ng::Value) -> Option<Box<dyn Task>> {
         let task_body = yml.get(task_name)?;
-        let return_expr = task_body.get("return")?;
+        let return_expr = task_body.get("return")?.clone();
 
         let status_code: u16 = task_body
             .get("status")
@@ -29,9 +29,9 @@ impl TaskFactory for RetFactory {
         let next_task = self.get_next_task(task_name, yml);
 
         Some(Box::new(Ret {
-            return_expr: return_expr.clone(),
-            status_code: status_code,
-            next_task: next_task,
+            return_expr,
+            status_code,
+            next_task,
             name: task_name.to_string(),
         }))
     }
