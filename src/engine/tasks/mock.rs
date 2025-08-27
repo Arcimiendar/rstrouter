@@ -2,6 +2,7 @@ use crate::engine::context::Context;
 use crate::engine::tasks::task::{ExecutionResult, Task, TaskFactory, render_obj};
 use async_trait::async_trait;
 use serde_yaml_ng::Value as YmlValue;
+use tokio::time::{Duration, sleep};
 
 #[derive(Debug)]
 pub struct MockFactory {}
@@ -12,6 +13,7 @@ pub struct Mock {
     result: Option<String>,
     next_task: Option<String>,
     name: String,
+    sleep_mcs: u64,
 }
 
 impl TaskFactory for MockFactory {
@@ -27,6 +29,7 @@ impl TaskFactory for MockFactory {
             .get("result")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
+        let sleep_mcs = task_body.get("sleep").and_then(|s| s.as_u64()).unwrap_or(0);
 
         let next_task = self.get_next_task(task_name, yml);
 
@@ -35,6 +38,7 @@ impl TaskFactory for MockFactory {
             result,
             next_task: next_task,
             name: task_name.to_string(),
+            sleep_mcs,
         }))
     }
 }
@@ -58,10 +62,93 @@ impl Task for Mock {
             )));
         }
 
+        if self.sleep_mcs > 0 {
+            sleep(Duration::from_millis(self.sleep_mcs)).await;
+        }
+
         ExecutionResult(context, self.next_task.clone())
     }
 
     fn get_name(&self) -> &str {
         &self.name
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        endpoints::types::Request,
+        engine::{
+            context::Context,
+            tasks::{mock::MockFactory, task::TaskFactory},
+        },
+    };
+    use serde_json::Value as JsonValue;
+    use std::collections::HashMap;
+
+    #[test]
+    fn factory_returns_none() {
+        let factory = MockFactory::new();
+        let value = factory.from_yml(
+            "test",
+            &serde_yaml_ng::from_str(
+                r#"
+                    test:
+                      args: 
+                        url: https://google.com
+                "#,
+            )
+            .unwrap(),
+        );
+
+        assert!(value.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_mock_tasks() {
+        let factory = MockFactory::new();
+        let value = factory.from_yml(
+            "test",
+            &serde_yaml_ng::from_str(
+                r#"
+                    test:
+                      call: reflect.mock
+                      sleep: 500
+                      args: 
+                        response:
+                          body:
+                           some: body
+                      result: test
+                "#,
+            )
+            .unwrap(),
+        );
+
+        assert!(value.is_some());
+
+        let task = value.unwrap();
+
+        let context = Context::from_request(
+            Request::new(
+                HashMap::new(),
+                JsonValue::Null,
+                "http://localhost:8090/test",
+            )
+            .unwrap(),
+        );
+
+        let res = task.execute(context).await;
+        let ctx = res.0;
+
+        let v = ctx.evaluate_expr("${test}");
+        assert_eq!(
+            v.get("response")
+                .unwrap()
+                .get("body")
+                .unwrap()
+                .get("some")
+                .unwrap(),
+            "body"
+        );
     }
 }

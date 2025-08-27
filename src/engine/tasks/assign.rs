@@ -66,7 +66,6 @@ impl Task for Assign {
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashMap;
     use crate::{
         endpoints::types::Request,
         engine::{
@@ -75,6 +74,7 @@ mod test {
         },
     };
     use serde_json::Value as JsonValue;
+    use std::collections::HashMap;
 
     #[test]
     fn test_task_is_not_parsed() {

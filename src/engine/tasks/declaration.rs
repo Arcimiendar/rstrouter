@@ -20,9 +20,11 @@ impl DeclarationFactory {
 
 impl TaskFactory for DeclarationFactory {
     fn from_yml(&self, task_name: &str, yml: &serde_yaml_ng::Value) -> Option<Box<dyn Task>> {
-        if task_name != "declaration" {
+        let task_root = yml.get(task_name)?;
+
+        if task_root.get("call")?.as_str()? != "declare" {
             return None;
-        };
+        }
 
         let next_task = self.get_next_task(task_name, yml);
 
@@ -33,7 +35,7 @@ impl TaskFactory for DeclarationFactory {
 #[async_trait]
 impl Task for Declaration {
     async fn execute(&self, context: Context) -> ExecutionResult {
-        // this is noop for now
+        // todo: implement declaration check by validating incoming request
         info!("Declaration was executed!");
         ExecutionResult(context, self.next_task.clone())
     }
