@@ -81,7 +81,6 @@ impl Task for Switch {
     }
 }
 
-
 #[cfg(test)]
 mod test {
     use crate::{
@@ -107,12 +106,11 @@ mod test {
                         incorrect: condition
                 "#,
             )
-            .unwrap()
+            .unwrap(),
         );
 
         assert!(value.is_none())
     }
-
 
     #[tokio::test]
     async fn test_switch_condition() {

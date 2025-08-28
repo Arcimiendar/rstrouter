@@ -113,6 +113,9 @@ mod test {
                     r#"
                         test:
                           return: ok
+                        
+                        some_next_task: 
+                          return: ok
                     "#,
                 )
                 .unwrap(),

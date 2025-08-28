@@ -207,3 +207,34 @@ impl Task for Http {
         &self.name
     }
 }
+
+#[cfg(test)]
+mod test {
+    // use std::collections::HashMap;
+
+    use crate::{
+        // endpoints::types::Request,
+        engine::{
+            // context::Context,
+            tasks::{http::HttpFactory, task::TaskFactory},
+        },
+    };
+    // use serde_json::Value as JsonValue;
+
+    #[test]
+    fn factory_returns_none() {
+        let factory = HttpFactory::new();
+        let value = factory.from_yml(
+            "test",
+            &serde_yaml_ng::from_str(
+                r#"
+                    test:
+                      assign:
+                        a: b
+                "#,
+            )
+            .unwrap(),
+        );
+        assert!(value.is_none());
+    }
+}

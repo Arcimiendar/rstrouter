@@ -34,3 +34,42 @@ pub fn produce_task(task_name: &str, global_value: &YmlValue) -> Option<Box<dyn 
         .flat_map(|f| f.from_yml(task_name, global_value))
         .next() // returns first successfull parsed task
 }
+
+
+#[cfg(test)] 
+mod test {
+    use crate::engine::tasks::produce_task;
+
+    #[test]
+    fn test_produce_task() {
+        let yml = serde_yaml_ng::from_str(
+            r#"
+                test:
+                  some: task
+            "#
+        )
+        .unwrap();
+        let t = produce_task("test", &yml);
+        assert!(t.is_none());
+
+        let yml = serde_yaml_ng::from_str(
+            r#"
+                test:
+                  some: task
+            "#
+        )
+        .unwrap();
+        let t = produce_task("missing", &yml);
+        assert!(t.is_none());
+
+        let yml = serde_yaml_ng::from_str(
+            r#"
+                test:
+                  return: ok
+            "#
+        )
+        .unwrap();
+        let t = produce_task("test", &yml);
+        assert!(t.is_some());
+    }
+}

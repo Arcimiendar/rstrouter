@@ -118,3 +118,187 @@ pub fn preprocess_obj(yml: &YmlValue) -> YmlValue {
         others => others.clone(),
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        endpoints::types::Request,
+        engine::{
+            context::Context,
+            tasks::task::{preprocess_obj, render_obj},
+        },
+    };
+    use serde_json::Value as JsonValue;
+    use serde_yaml_ng::Value as YmlValue;
+    use std::collections::HashMap;
+    use std::env;
+
+    #[test]
+    fn preprocess_obj_test_without_env() {
+        let yml: YmlValue = serde_yaml_ng::from_str(
+            r#"
+              test:
+                obj:
+                  a: b
+                arr:
+                  - 1
+                str: str
+            "#,
+        )
+        .unwrap();
+        let processed_yml = preprocess_obj(&yml);
+        assert_eq!(
+            processed_yml
+                .get("test")
+                .and_then(|f| f.get("obj"))
+                .and_then(|f| f.get("a"))
+                .unwrap(),
+            "b"
+        );
+        assert_eq!(
+            processed_yml
+                .get("test")
+                .and_then(|f| f.get("str"))
+                .unwrap(),
+            "str"
+        );
+
+        assert_eq!(
+            processed_yml
+                .get("test")
+                .and_then(|f| f.get("arr"))
+                .and_then(|f| f.as_sequence())
+                .and_then(|f| f.first())
+                .unwrap(),
+            1
+        );
+    }
+
+    #[test]
+    fn preprocess_obj_test_env() {
+        let yml: YmlValue = serde_yaml_ng::from_str(
+            r#"
+              test:
+                obj:
+                  a: b[#TEST]
+                arr:
+                  - 1[#TEST]
+                str: str[#TEST]
+            "#,
+        )
+        .unwrap();
+        let processed_yml = preprocess_obj(&yml);
+
+        assert_eq!(
+            processed_yml
+                .get("test")
+                .and_then(|f| f.get("obj"))
+                .and_then(|f| f.get("a"))
+                .unwrap(),
+            "b"
+        );
+
+        assert_eq!(
+            processed_yml
+                .get("test")
+                .and_then(|f| f.get("str"))
+                .unwrap(),
+            "str"
+        );
+
+        assert_eq!(
+            processed_yml
+                .get("test")
+                .and_then(|f| f.get("arr"))
+                .and_then(|f| f.as_sequence())
+                .and_then(|f| f.first())
+                .unwrap(),
+            "1"
+        );
+
+        unsafe {
+            env::set_var("TEST", "some");
+        }
+        let yml: YmlValue = serde_yaml_ng::from_str(
+            r#"
+              test:
+                obj:
+                  a: b[#TEST]
+                arr:
+                  - 1[#TEST]
+                str: str[#TEST]
+            "#,
+        )
+        .unwrap();
+        let processed_yml = preprocess_obj(&yml);
+
+        assert_eq!(
+            processed_yml
+                .get("test")
+                .and_then(|f| f.get("obj"))
+                .and_then(|f| f.get("a"))
+                .unwrap(),
+            "bsome"
+        );
+
+        assert_eq!(
+            processed_yml
+                .get("test")
+                .and_then(|f| f.get("str"))
+                .unwrap(),
+            "strsome"
+        );
+
+        assert_eq!(
+            processed_yml
+                .get("test")
+                .and_then(|f| f.get("arr"))
+                .and_then(|f| f.as_sequence())
+                .and_then(|f| f.first())
+                .unwrap(),
+            "1some"
+        );
+    }
+
+    #[test]
+    fn render_obj_test() {
+        let context = Context::from_request(
+            Request::new(
+                HashMap::new(),
+                JsonValue::Null,
+                "http://localhost:8090/test",
+            )
+            .unwrap(),
+        );
+
+        let yml: YmlValue = serde_yaml_ng::from_str(
+            r#"
+                obj:
+                  str: ${"some string"}
+                  bool: true
+                  nullable: null
+                  number: 123
+                  sequence:
+                   - ${1 + 2}         
+            "#,
+        )
+        .unwrap();
+
+        let v = render_obj(&yml, &context);
+        let obj = v.get("obj").unwrap();
+        assert!(obj.is_object());
+        assert_eq!(obj.get("str").unwrap(), "some string");
+        assert_eq!(obj.get("bool").unwrap(), true);
+        assert!(obj.get("nullable").unwrap().is_null());
+        assert_eq!(obj.get("number").unwrap(), 123);
+        assert_eq!(
+            obj.get("sequence")
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .first()
+                .unwrap(),
+            3
+        );
+    }
+}
