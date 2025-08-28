@@ -277,3 +277,42 @@ impl Drop for Context {
         }
     }
 }
+
+
+#[cfg(test)]
+mod test {
+    use crate::{endpoints::types::Request, engine::context::Context};
+    use std::collections::HashMap;
+    use serde_json::json;
+
+    #[test]
+    fn test_context() {
+        let headers = HashMap::from([
+            ("test".to_string(), "1234".to_string()),
+        ]);
+        let context = Context::from_request(Request::new(
+            headers, json!({"a" : ["c"]}), "http://localhost:8090/test?a=b",
+        ).unwrap());
+
+
+        let res = context.evaluate_expr("1 ${incoming.params.a}");
+        assert_eq!(res, "1 b");
+        let res = context.evaluate_expr("${incoming.body.a}");
+        assert_eq!(res, json!(["c"]));
+        let res = context.evaluate_expr("do not modify");
+        assert_eq!(res, "do not modify");
+        let res = context.evaluate_expr("${incoming.headers.test}");
+        assert_eq!(res, "1234");
+
+        context.set_return_value(201, json!({"hello": "world"}));
+        let res = context.get_return_value();
+        assert_eq!(res.json, json!({"hello": "world"}));
+        assert_eq!(res.status, 201);
+
+        context.evaluate_expr(&Context::wrap_js_code("let someVar = 33;"));
+        let res = context.evaluate_expr("${someVar}");
+        assert_eq!(res, 33);
+
+        drop(context);
+    }
+}
