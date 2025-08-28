@@ -278,22 +278,23 @@ impl Drop for Context {
     }
 }
 
-
 #[cfg(test)]
 mod test {
     use crate::{endpoints::types::Request, engine::context::Context};
-    use std::collections::HashMap;
     use serde_json::json;
+    use std::collections::HashMap;
 
     #[test]
     fn test_context() {
-        let headers = HashMap::from([
-            ("test".to_string(), "1234".to_string()),
-        ]);
-        let context = Context::from_request(Request::new(
-            headers, json!({"a" : ["c"]}), "http://localhost:8090/test?a=b",
-        ).unwrap());
-
+        let headers = HashMap::from([("test".to_string(), "1234".to_string())]);
+        let context = Context::from_request(
+            Request::new(
+                headers,
+                json!({"a" : ["c"]}),
+                "http://localhost:8090/test?a=b",
+            )
+            .unwrap(),
+        );
 
         let res = context.evaluate_expr("1 ${incoming.params.a}");
         assert_eq!(res, "1 b");

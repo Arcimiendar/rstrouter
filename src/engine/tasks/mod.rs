@@ -35,8 +35,7 @@ pub fn produce_task(task_name: &str, global_value: &YmlValue) -> Option<Box<dyn 
         .next() // returns first successfull parsed task
 }
 
-
-#[cfg(test)] 
+#[cfg(test)]
 mod test {
     use crate::engine::tasks::produce_task;
 
@@ -46,7 +45,7 @@ mod test {
             r#"
                 test:
                   some: task
-            "#
+            "#,
         )
         .unwrap();
         let t = produce_task("test", &yml);
@@ -56,7 +55,7 @@ mod test {
             r#"
                 test:
                   some: task
-            "#
+            "#,
         )
         .unwrap();
         let t = produce_task("missing", &yml);
@@ -66,7 +65,7 @@ mod test {
             r#"
                 test:
                   return: ok
-            "#
+            "#,
         )
         .unwrap();
         let t = produce_task("test", &yml);

@@ -26,3 +26,54 @@ pub fn get_route(chunk: Vec<&Endpoint>) -> MethodRouter {
 
     method_router
 }
+
+#[cfg(test)]
+mod test {
+    use crate::endpoints::{parser::Endpoint, route::get_route};
+
+    #[test]
+    fn test_get_route() {
+        let endpoints_owned = vec![
+            Endpoint {
+                guards: vec![],
+                tag: "some".to_string(),
+                url_path: "/some/".to_string(),
+                method: rstmytype::ApiEndpointMethod::Get,
+                content: r#"
+                    test: 
+                      return: ok
+                "#
+                .to_string(),
+                yml_content: serde_yaml_ng::from_str(
+                    r#"
+                      test:
+                        return: ok
+                    "#,
+                )
+                .unwrap(),
+            },
+            Endpoint {
+                guards: vec![],
+                tag: "some".to_string(),
+                url_path: "/some/".to_string(),
+                method: rstmytype::ApiEndpointMethod::Post,
+                content: r#"
+                    test: 
+                      return: ok
+                "#
+                .to_string(),
+                yml_content: serde_yaml_ng::from_str(
+                    r#"
+                      test:
+                        return: ok
+                    "#,
+                )
+                .unwrap(),
+            },
+        ];
+
+        let endpoitns = endpoints_owned.iter().collect();
+        let r = get_route(endpoitns);
+        drop(r);
+    }
+}
