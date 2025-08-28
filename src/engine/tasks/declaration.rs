@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use log::info;
 
 use crate::engine::context::Context;
 use crate::engine::tasks::task::{ExecutionResult, Task, TaskFactory};
@@ -9,6 +8,7 @@ pub struct DeclarationFactory {}
 
 #[derive(Debug)]
 struct Declaration {
+    name: String,
     next_task: Option<String>,
 }
 
@@ -28,19 +28,80 @@ impl TaskFactory for DeclarationFactory {
 
         let next_task = self.get_next_task(task_name, yml);
 
-        Some(Box::new(Declaration { next_task }))
+        Some(Box::new(Declaration {
+            name: task_name.to_string(),
+            next_task,
+        }))
     }
 }
 
 #[async_trait]
 impl Task for Declaration {
     async fn execute(&self, context: Context) -> ExecutionResult {
-        // todo: implement declaration check by validating incoming request
-        info!("Declaration was executed!");
         ExecutionResult(context, self.next_task.clone())
     }
 
     fn get_name(&self) -> &str {
-        "declaration"
+        &self.name
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::collections::HashMap;
+    use serde_json::Value as JsonValue;
+    use crate::{
+        endpoints::types::Request,
+        engine::{
+            context::Context,
+            tasks::{declaration::DeclarationFactory, task::TaskFactory},
+        },
+    };
+
+    #[test]
+    fn test_task_is_not_parsed() {
+        let factory = DeclarationFactory::new();
+
+        let obj = factory.from_yml(
+            "test",
+            &serde_yaml_ng::from_str(
+                r#"
+                    test:
+                      return: ok
+                "#,
+            )
+            .unwrap(),
+        );
+
+        assert!(obj.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_declaration_task() {
+        let factory = DeclarationFactory::new();
+        let obj = factory.from_yml(
+            "test",
+            &serde_yaml_ng::from_str(
+                r#"
+                    test:
+                      call: declare
+                "#,
+            )
+            .unwrap(),
+        );
+
+        assert!(obj.is_some());
+        let task = obj.unwrap();
+
+        let context = Context::from_request(
+            Request::new(
+                HashMap::new(),
+                JsonValue::Null,
+                "http://localhost:8090/test",
+            )
+            .unwrap(),
+        );
+
+        task.execute(context).await;
     }
 }

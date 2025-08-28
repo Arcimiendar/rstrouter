@@ -18,7 +18,6 @@ pub struct HttpFactory {}
 #[derive(Debug)]
 pub enum HttpMethod {
     Get,
-    Head,
     Post,
     Put,
     Delete,
@@ -31,7 +30,6 @@ impl HttpMethod {
         match self {
             Self::Get => client.get(url),
             Self::Post => client.post(url),
-            Self::Head => client.head(url),
             Self::Delete => client.delete(url),
             Self::Patch => client.patch(url),
             Self::Put => client.put(url),
@@ -83,9 +81,11 @@ impl HttpArgs {
     }
 
     async fn do_request(&self, context: &Context) -> JsonValue {
+        let evaluate_result = context.evaluate_expr(&self.url);
+        let url = evaluate_result.as_str().unwrap_or(&self.url);
         let request_result = self
             .method
-            .to_request_builder(&self.url)
+            .to_request_builder(url)
             .headers(self.render_headers(&context))
             .query(&self.render_query(context))
             .json(&self.render_body(context))
@@ -124,7 +124,6 @@ impl HttpFactory {
 
         let method = match method_str.split('.').last()? {
             "get" => HttpMethod::Get,
-            "head" => HttpMethod::Head,
             "post" => HttpMethod::Post,
             "put" => HttpMethod::Put,
             "delete" => HttpMethod::Delete,
@@ -210,16 +209,16 @@ impl Task for Http {
 
 #[cfg(test)]
 mod test {
-    // use std::collections::HashMap;
-
     use crate::{
-        // endpoints::types::Request,
+        endpoints::types::Request,
         engine::{
-            // context::Context,
+            context::Context,
             tasks::{http::HttpFactory, task::TaskFactory},
         },
     };
-    // use serde_json::Value as JsonValue;
+    use std::collections::HashMap;
+    use httpmock::{prelude::*, Method};
+    use serde_json::{json, Value as JsonValue};
 
     #[test]
     fn factory_returns_none() {
@@ -236,5 +235,123 @@ mod test {
             .unwrap(),
         );
         assert!(value.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_http_post_task() {
+        let test_server = MockServer::start_async().await;
+        let options = [
+            (Method::POST, "post"),
+            (Method::PUT, "put"),
+            (Method::PATCH, "patch"),
+            (Method::DELETE, "delete"),
+        ];
+        for (method, m_str) in options {
+
+            let mock = test_server.mock_async(|when, then| {
+                when.path("/test")
+                    .method(method)
+                    .body(json!({"c": [11, 15]}).to_string())
+                    .header("test", "4");
+                then.body(json!({"ok": "is ok!"}).to_string())
+                    .status(201);
+            }).await;
+
+            let factory = HttpFactory::new();
+            let obj = factory.from_yml(
+                "test",
+                &serde_yaml_ng::from_str(
+                    &format!(r#"
+                        test:
+                          call: http.{}
+                          args: 
+                            url: {}
+                            headers:
+                              test: ${{(1 + 3).toString()}}
+                            query: 
+                              a: ${{3 + 5}}
+                            body:
+                              c: 
+                                - ${{5 + 6}}
+                                - ${{7 + 8}}
+                          result: res
+                            
+                    "#, m_str, test_server.url("/test")),
+                )
+                .unwrap(),
+            );
+
+            assert!(obj.is_some());
+            let task = obj.unwrap();
+
+            let context = Context::from_request(
+                Request::new(
+                    HashMap::new(),
+                    JsonValue::Null,
+                    "http://localhost:8090/test",
+                )
+                .unwrap(),
+            );
+
+            let res = task.execute(context).await;
+            mock.assert();
+
+            let ctx = res.0;
+
+            let response = ctx.evaluate_expr("${res.response.body.ok}");
+            assert_eq!(response, "is ok!");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_http_get_task() {
+        let test_server = MockServer::start_async().await;
+        let mock = test_server.mock_async(|when, then| {
+            when.path("/test")
+                .method(GET)
+                .header("test", "4");
+            then.body(json!({"ok": "is ok!"}).to_string())
+                .status(200);
+        }).await;
+
+        let factory = HttpFactory::new();
+        let obj = factory.from_yml(
+            "test",
+            &serde_yaml_ng::from_str(
+                &format!(r#"
+                    test:
+                      call: http.get
+                      args: 
+                        url: {}
+                        headers:
+                          test: ${{(1 + 3).toString()}}
+                        query: 
+                          a: ${{3 + 5}}
+                      result: res
+                        
+                "#, test_server.url("/test")),
+            )
+            .unwrap(),
+        );
+
+        assert!(obj.is_some());
+        let task = obj.unwrap();
+
+        let context = Context::from_request(
+            Request::new(
+                HashMap::new(),
+                JsonValue::Null,
+                "http://localhost:8090/test",
+            )
+            .unwrap(),
+        );
+
+        let res = task.execute(context).await;
+        mock.assert();
+
+        let ctx = res.0;
+
+        let response = ctx.evaluate_expr("${res.response.body.ok}");
+        assert_eq!(response, "is ok!");
     }
 }
