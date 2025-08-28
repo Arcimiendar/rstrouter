@@ -75,7 +75,7 @@ impl IntoResponse for EngineResponse {
 }
 
 impl Engine {
-    pub fn new(endpoint: &Endpoint) -> Self {
+    pub fn from_endpoint(endpoint: &Endpoint) -> Self {
         Self {
             guards: endpoint
                 .guards
@@ -98,7 +98,7 @@ impl Engine {
         for guard in &self.guards {
             context = guard.walk_through(context).await;
             let return_value = context.get_return_value();
-            if return_value.status < 200 && return_value.status >= 300 {
+            if return_value.status < 200 || return_value.status >= 300 {
                 return EngineResponse(
                     json!({
                         "response": return_value.json
@@ -117,5 +117,119 @@ impl Engine {
             }),
             return_value.status,
         )
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        endpoints::{
+            parser::{Endpoint, Guard},
+            types::Request,
+        },
+        engine::Engine,
+    };
+    use axum::response::IntoResponse;
+    use serde_json::{Value as JsonValue, json};
+    use std::collections::HashMap;
+
+    #[tokio::test]
+    async fn test_from_template() {
+        let engine = Engine::from_template(
+            &serde_yaml_ng::from_str(
+                r#"
+                    return:
+                      return: ok
+                "#,
+            )
+            .unwrap(),
+        );
+
+        let res = engine
+            .execute(
+                Request::new(
+                    HashMap::new(),
+                    JsonValue::Null,
+                    "http://localhost:8090/test",
+                )
+                .unwrap(),
+            )
+            .await;
+
+        assert_eq!(res.0, json!({"response": "ok"}));
+    }
+
+    #[tokio::test]
+    async fn test_from_endpoint_with_guards() {
+        let endpoint = Endpoint {
+            guards: vec![Guard {
+                yml_content: serde_yaml_ng::from_str(
+                    r#"
+                        condition: 
+                          switch:
+                            - condition: ${incoming.params.error === "error"}
+                              next: error
+
+                        test: 
+                          return: ok
+                          next: end
+
+                        error:
+                          return: guard return
+                          status: 400
+                    "#,
+                )
+                .unwrap(),
+            }],
+            tag: "some".to_string(),
+            url_path: "/some/".to_string(),
+            method: rstmytype::ApiEndpointMethod::Get,
+            content: r#"
+                test:
+                  return: ok
+            "#
+            .to_string(),
+            yml_content: serde_yaml_ng::from_str(
+                r#"
+                    test:
+                      return: ok
+                "#,
+            )
+            .unwrap(),
+        };
+
+        let engine = Engine::from_endpoint(&endpoint);
+
+        let res = engine
+            .execute(
+                Request::new(
+                    HashMap::new(),
+                    JsonValue::Null,
+                    "http://localhost:8090/test",
+                )
+                .unwrap(),
+            )
+            .await;
+
+        assert_eq!(res.0, json!({"response": "ok"}));
+        assert_eq!(res.1, 200);
+
+        let res = engine
+            .execute(
+                Request::new(
+                    HashMap::new(),
+                    JsonValue::Null,
+                    "http://localhost:8090/test?error=error",
+                )
+                .unwrap(),
+            )
+            .await;
+
+        assert_eq!(res.0, json!({"response": "guard return"}));
+        assert_eq!(res.1, 400);
+
+        let resp = res.into_response();
+        let status = resp.status();
+        assert_eq!(status.as_u16(), 400);
     }
 }

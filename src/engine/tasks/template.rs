@@ -142,7 +142,7 @@ mod test {
             tasks::{task::TaskFactory, template::TemplateFactory},
         },
     };
-    use serde_json::{json, Value as JsonValue};
+    use serde_json::{Value as JsonValue, json};
     use std::collections::HashMap;
 
     #[test]
@@ -194,18 +194,19 @@ mod test {
             )
             .unwrap(),
         );
-        
 
         let res = task.execute(context).await;
         let context = res.0;
 
         let res = context.evaluate_expr("${res}");
 
-        assert_eq!(*res.get("response").unwrap(), json!({
-            "headers": {"test": "ok"},
-            "body": {"test": "ok"},
-            "params": {"test": "ok"}
-        }));
-
+        assert_eq!(
+            *res.get("response").unwrap(),
+            json!({
+                "headers": {"test": "ok"},
+                "body": {"test": "ok"},
+                "params": {"test": "ok"}
+            })
+        );
     }
 }

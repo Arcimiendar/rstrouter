@@ -11,7 +11,7 @@ pub fn get_route(chunk: Vec<&Endpoint>) -> MethodRouter {
     let mut method_router = MethodRouter::new();
 
     for endpoint in chunk {
-        let engine = Arc::new(Engine::new(endpoint));
+        let engine = Arc::new(Engine::from_endpoint(endpoint));
 
         if endpoint.method == ApiEndpointMethod::Get {
             method_router = method_router.get(|q: Request| async move {
