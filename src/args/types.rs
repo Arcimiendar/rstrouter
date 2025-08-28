@@ -60,7 +60,7 @@ mod test {
     #[test]
     fn test_get_args() {
         unsafe {
-            set_var("DSL_PATH", ".");
+            set_var("DSL_PATH", "./unittest_dsl");
         }
         get_args();
     }

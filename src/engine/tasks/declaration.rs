@@ -48,8 +48,6 @@ impl Task for Declaration {
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashMap;
-    use serde_json::Value as JsonValue;
     use crate::{
         endpoints::types::Request,
         engine::{
@@ -57,6 +55,8 @@ mod test {
             tasks::{declaration::DeclarationFactory, task::TaskFactory},
         },
     };
+    use serde_json::Value as JsonValue;
+    use std::collections::HashMap;
 
     #[test]
     fn test_task_is_not_parsed() {

@@ -216,9 +216,9 @@ mod test {
             tasks::{http::HttpFactory, task::TaskFactory},
         },
     };
+    use httpmock::{Method, prelude::*};
+    use serde_json::{Value as JsonValue, json};
     use std::collections::HashMap;
-    use httpmock::{prelude::*, Method};
-    use serde_json::{json, Value as JsonValue};
 
     #[test]
     fn factory_returns_none() {
@@ -247,21 +247,21 @@ mod test {
             (Method::DELETE, "delete"),
         ];
         for (method, m_str) in options {
-
-            let mock = test_server.mock_async(|when, then| {
-                when.path("/test")
-                    .method(method)
-                    .body(json!({"c": [11, 15]}).to_string())
-                    .header("test", "4");
-                then.body(json!({"ok": "is ok!"}).to_string())
-                    .status(201);
-            }).await;
+            let mock = test_server
+                .mock_async(|when, then| {
+                    when.path("/test")
+                        .method(method)
+                        .body(json!({"c": [11, 15]}).to_string())
+                        .header("test", "4");
+                    then.body(json!({"ok": "is ok!"}).to_string()).status(201);
+                })
+                .await;
 
             let factory = HttpFactory::new();
             let obj = factory.from_yml(
                 "test",
-                &serde_yaml_ng::from_str(
-                    &format!(r#"
+                &serde_yaml_ng::from_str(&format!(
+                    r#"
                         test:
                           call: http.{}
                           args: 
@@ -276,8 +276,10 @@ mod test {
                                 - ${{7 + 8}}
                           result: res
                             
-                    "#, m_str, test_server.url("/test")),
-                )
+                    "#,
+                    m_str,
+                    test_server.url("/test")
+                ))
                 .unwrap(),
             );
 
@@ -306,19 +308,18 @@ mod test {
     #[tokio::test]
     async fn test_http_get_task() {
         let test_server = MockServer::start_async().await;
-        let mock = test_server.mock_async(|when, then| {
-            when.path("/test")
-                .method(GET)
-                .header("test", "4");
-            then.body(json!({"ok": "is ok!"}).to_string())
-                .status(200);
-        }).await;
+        let mock = test_server
+            .mock_async(|when, then| {
+                when.path("/test").method(GET).header("test", "4");
+                then.body(json!({"ok": "is ok!"}).to_string()).status(200);
+            })
+            .await;
 
         let factory = HttpFactory::new();
         let obj = factory.from_yml(
             "test",
-            &serde_yaml_ng::from_str(
-                &format!(r#"
+            &serde_yaml_ng::from_str(&format!(
+                r#"
                     test:
                       call: http.get
                       args: 
@@ -329,8 +330,9 @@ mod test {
                           a: ${{3 + 5}}
                       result: res
                         
-                "#, test_server.url("/test")),
-            )
+                "#,
+                test_server.url("/test")
+            ))
             .unwrap(),
         );
 

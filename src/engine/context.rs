@@ -102,11 +102,22 @@ impl LocalContext {
         context
             .register_global_property(JsString::from("incoming"), obj, property::Attribute::all())
             .ok();
-        Self {
+
+        let ctx = Self {
             status_code: RefCell::new(200),
             return_json: RefCell::new(JsonValue::Null),
             context: RefCell::new(context),
-        }
+        };
+
+        // TODO: make it passable from params.
+        let args = crate::args::types::get_args();
+        let dsl = args.dsl_path;
+
+        ctx.evaluate_expr(&Context::wrap_js_code(&format!(
+            "var dsl = {}",
+            JsonValue::String(dsl)
+        )));
+        ctx
     }
 
     pub fn get_return_value(&self) -> ReturnValue {
@@ -144,15 +155,26 @@ impl LocalContext {
     pub fn evaluate_expr(&self, expr: &str) -> JsonValue {
         let expr_copy = expr.to_string();
 
-        if expr_copy.starts_with("${") && expr_copy.ends_with("}") {
+        if self.is_obj(&expr_copy) {
             return self.execute_js_signle_line(&expr_copy[2..expr_copy.len() - 1]);
         }
 
-        if expr_copy.contains("${") && expr_copy.contains("}") {
+        if self.is_template_string(expr) {
             return self.execute_js_signle_line(&format!("`{}`", expr_copy));
         }
 
         json!(expr_copy)
+    }
+
+    fn is_obj(&self, expr: &str) -> bool {
+        if !(expr.starts_with("${") && expr.ends_with("}")) {
+            return false;
+        }
+        !expr[2..expr.len() - 1].contains("${")
+    }
+
+    fn is_template_string(&self, expr: &str) -> bool {
+        expr.contains("${") && expr.contains("}")
     }
 }
 
@@ -313,6 +335,9 @@ mod test {
         context.evaluate_expr(&Context::wrap_js_code("let someVar = 33;"));
         let res = context.evaluate_expr("${someVar}");
         assert_eq!(res, 33);
+
+        let res = context.evaluate_expr("${dsl}");
+        assert_eq!("./unittest_dsl", res);
 
         drop(context);
     }

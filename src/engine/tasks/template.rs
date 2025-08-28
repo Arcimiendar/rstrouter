@@ -41,6 +41,11 @@ impl TaskFactory for TemplateFactory {
             .map(|v| v.clone())
             .unwrap_or(YmlValue::Null);
 
+        let result = task_root
+            .get("result")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
         Some(Box::new(Template {
             name: task_name.to_string(),
             template_path,
@@ -48,6 +53,7 @@ impl TaskFactory for TemplateFactory {
             query,
             body,
             headers,
+            result,
         }))
     }
 }
@@ -66,12 +72,14 @@ struct Template {
     headers: HashMap<String, String>,
     query: HashMap<String, String>,
     body: YmlValue,
+    result: Option<String>,
 }
 
 #[async_trait]
 impl Task for Template {
     async fn execute(&self, context: Context) -> ExecutionResult {
-        let evalueated_expr = context.evaluate_expr(&self.template_path);
+        // TODO: make template format ruuter compatible
+        let evalueated_expr = context.evaluate_expr(&format!("${{dsl}}/{}", self.template_path));
         let rendered_path = evalueated_expr.as_str().unwrap_or(&self.template_path);
         let template = std::fs::read_to_string(rendered_path)
             .ok()
@@ -81,7 +89,13 @@ impl Task for Template {
 
         if let Some(request) = self.create_request(&context, rendered_path) {
             let result = internal_engine.execute(request).await;
-            context.set_return_value(result.1, result.0);
+            if let Some(r) = &self.result {
+                context.evaluate_expr(&Context::wrap_js_code(&format!(
+                    "let {} = {};",
+                    r,
+                    result.0.to_string()
+                )));
+            }
         }
 
         ExecutionResult(context, self.next_task.clone())
@@ -116,5 +130,82 @@ impl Template {
         let uri = format!("http://internal/{}?{}", template_path, params);
 
         Request::new(headers, body, &uri).ok()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        endpoints::types::Request,
+        engine::{
+            context::Context,
+            tasks::{task::TaskFactory, template::TemplateFactory},
+        },
+    };
+    use serde_json::{json, Value as JsonValue};
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_task_is_not_parsed() {
+        let factory = TemplateFactory::new();
+        let obj = factory.from_yml(
+            "test",
+            &serde_yaml_ng::from_str(
+                r#"
+                    test:
+                      return: ok
+                "#,
+            )
+            .unwrap(),
+        );
+
+        assert!(obj.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_template_task() {
+        let factory = TemplateFactory::new();
+        let obj = factory.from_yml(
+            "test",
+            &serde_yaml_ng::from_str(
+                r#"
+                    test:
+                      template: test/TEMPLATES/test.yml
+                      body: 
+                        test: ok
+                      headers:
+                        test: ok
+                      query:
+                        test: ok
+                      result: res
+                "#,
+            )
+            .unwrap(),
+        );
+
+        assert!(obj.is_some());
+        let task = obj.unwrap();
+
+        let context = Context::from_request(
+            Request::new(
+                HashMap::new(),
+                JsonValue::Null,
+                "http://localhost:8090/test",
+            )
+            .unwrap(),
+        );
+        
+
+        let res = task.execute(context).await;
+        let context = res.0;
+
+        let res = context.evaluate_expr("${res}");
+
+        assert_eq!(*res.get("response").unwrap(), json!({
+            "headers": {"test": "ok"},
+            "body": {"test": "ok"},
+            "params": {"test": "ok"}
+        }));
+
     }
 }
