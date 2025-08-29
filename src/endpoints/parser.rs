@@ -230,9 +230,11 @@ impl Endpoint {
 
             if let Some(al_list) = val.get("allowlist") {
                 if let Some(pm) = al_list.get("params").and_then(|p| p.as_sequence()) {
+                    // todo remove repeats
                     params.extend(pm.iter().map(|p| p.clone()));
                 }
                 if let Some(pm) = al_list.get("query").and_then(|p| p.as_sequence()) {
+                    // todo remove repeats
                     params.extend(pm.iter().map(|p| p.clone()));
                 }
                 if let Some(hd) = al_list.get("headers").and_then(|h| h.as_sequence()) {
@@ -240,12 +242,16 @@ impl Endpoint {
                 }
                 if let Some(bd) = al_list.get("body") {
                     if body.is_null() && !bd.is_null(){
-                        // todo implement merge body. Right now the first body will be accounted
                         body = bd.clone();
                     }
+                    body = Self::merge_two_body(&body, bd);
                 }
             }
         }
+
+        let headers = Self::remove_fields_duplicate(headers);
+        let params = Self::remove_fields_duplicate(params);
+
         let declare_task = YmlValue::Mapping(YmlMapping::from_iter([
             (YmlValue::String("call".into()), YmlValue::String("declare".into())),
             (YmlValue::String("description".into()), YmlValue::String(description)),
@@ -259,6 +265,176 @@ impl Endpoint {
         YmlValue::Mapping(YmlMapping::from_iter([
             (YmlValue::String("declaration".into()), declare_task)
         ]))
+    }
+
+    fn remove_fields_duplicate(to_remove: Vec<YmlValue>) -> Vec<YmlValue> {
+        // todo write tests for this
+        let mut new_vec = Vec::with_capacity(to_remove.len());
+        let mut used_indices = Vec::with_capacity(to_remove.len());
+        for (i, val_l) in to_remove.iter().enumerate() {
+            if used_indices.contains(&i) { // was alredy merged
+                continue;
+            }
+            let mut val_l_to_merge = val_l.clone();
+
+            for (ii, val_r) in to_remove.iter().enumerate().skip(i + 1) {
+                let name_l_opt = val_l.get("field").and_then(|f| f.as_str());
+                let name_r_opt = val_r.get("field").and_then(|f| f.as_str());
+
+                if let Some(name_l) = name_l_opt && let Some(name_r) = name_r_opt && name_l == name_r {
+                    val_l_to_merge = Self::merge_two_body(&val_l_to_merge, val_r);
+                    used_indices.push(ii);
+                }
+            }
+
+            new_vec.push(val_l_to_merge);
+        }
+
+        new_vec.clone() // to remove more than needed mem
+    }
+
+    fn merge_two_body(b_left: &YmlValue, b_right: &YmlValue) -> YmlValue {
+        // todo write tests for this
+
+        if b_left.is_null() {
+            return b_right.clone();
+        }
+        if b_right.is_null() {
+            return b_left.clone();
+        }
+
+        if b_left.is_sequence() && b_right.is_mapping() {
+            let mut b_right_copy = b_right.clone();
+
+            let mut merged_fields = b_left.clone();
+
+            if let Some(fields) = b_right_copy.get("fields") {
+                merged_fields = Self::merge_two_body(b_left, fields);
+            }
+
+            if let Some(m) = b_right_copy.as_mapping_mut() {
+                m.insert(YmlValue::String("fields".into()), merged_fields);
+            }
+            return b_right_copy;
+        }
+
+        if b_left.is_mapping() && b_right.is_sequence() {
+            return Self::merge_two_body(b_right, b_left);
+        }
+
+        if b_left.is_mapping() && b_right.is_mapping() {
+            let type_left = b_left.get("type").and_then(|v| v.as_str()).unwrap_or("string");
+            let type_right = b_right.get("type").and_then(|v| v.as_str()).unwrap_or("string");
+
+            if type_left != type_right {
+                warn!("can't merge types of body: {:?} and {:?}; returning left", b_left, b_right);
+                return b_left.clone();
+            }
+            
+            let mut type_copy = b_left.clone();
+
+            if type_left == "array" {
+                let l_items_opt = b_left.get("items");
+                let r_items_opt = b_right.get("items");
+                
+                let merged_items_opt = l_items_opt.iter()
+                    .chain(r_items_opt.iter())
+                    .filter(|v| {
+                        if !v.is_mapping() {
+                            warn!("Array items can be mapping only! Got {:?}", v);
+                        }
+                        v.is_mapping()
+                    }) // only mapping is allowed for items
+                    .map(|v| (*v).clone())
+                    .reduce(|a, b| Self::merge_two_body(&a, &b));
+
+                if let Some(merged_items) = merged_items_opt {
+                    // if atleast one items is there
+                    if let Some(m) = type_copy.as_mapping_mut() {
+                        // alway true
+                        m.insert(YmlValue::String("items".into()), merged_items);
+                    }
+                }
+            }
+
+            if type_left == "object" {
+                let l_fields_opt = b_left.get("fields");
+                let r_fields_opt = b_right.get("fields");
+
+                let merged_fields_opt = l_fields_opt.iter()
+                    .chain(r_fields_opt.iter())
+                    .filter(|v| { 
+                        if !v.is_sequence() {
+                            warn!("Object fields is not sequence! Obj: {:?}", v);
+                        }
+                        v.is_sequence()
+                    }) // fields sequence is only allowed fields type
+                    .map(|v| (*v).clone())
+                    .reduce(|a, b| Self::merge_two_body(&a, &b));
+                if let Some(merged_fields) = merged_fields_opt {
+                    // if at least one fields is presented and is sequence
+                    if let Some(m) = type_copy.as_mapping_mut() {
+                        // always true
+                        m.insert(YmlValue::String("fields".into()), merged_fields);
+                    }
+                }
+                
+            }
+
+            let description_l = b_left.get("description");
+            let description_r = b_right.get("description");
+            
+            let description_opt = description_l
+                .iter()
+                .chain(description_r.iter())
+                .flat_map(|v| v.as_str())
+                .map(|s| s.to_string())
+                .reduce(|d1, d2| {
+                    let mut res = String::with_capacity(d1.len() + d2.len() + "; ".len());
+
+                    res.push_str(&d1);
+                    res.push_str("; ");
+                    res.push_str(&d2);
+                    
+                    res
+                });
+
+            // todo: merge enums
+            if let Some(description) = description_opt {
+                if let Some(m) = type_copy.as_mapping_mut() {
+                    m.insert(YmlValue::String("description".to_string()), YmlValue::String(description));
+                }
+            }
+
+            return type_copy;
+        }   
+
+        if b_left.is_sequence() && b_right.is_sequence() {
+            // merge obj attrs
+            let default = Vec::with_capacity(0);
+            let bl_seq = b_left.as_sequence().unwrap_or(&default);
+            let br_seq = b_right.as_sequence().unwrap_or(&default);
+            
+            let new_seq = bl_seq
+                    .iter()
+                    .chain(br_seq)
+                    .map(|v| v.clone())
+                    .collect();
+
+            let new_seq = Self::remove_fields_duplicate(new_seq);
+
+            let new_body = YmlValue::Sequence(new_seq);
+            return new_body;
+        }
+
+
+        warn!("bad types format pair: {:?} and {:?}. Returning left the most appropriete", b_left, b_right);
+        
+        if b_right.is_sequence() || b_right.is_mapping() {
+            return b_left.clone();
+        }
+
+        return b_left.clone();
     }
 }
 
