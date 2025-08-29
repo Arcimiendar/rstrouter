@@ -225,11 +225,9 @@ impl Endpoint {
 
             if let Some(al_list) = val.get("allowlist") {
                 if let Some(pm) = al_list.get("params").and_then(|p| p.as_sequence()) {
-                    // todo remove repeats
                     params.extend(pm.iter().map(|p| p.clone()));
                 }
                 if let Some(pm) = al_list.get("query").and_then(|p| p.as_sequence()) {
-                    // todo remove repeats
                     params.extend(pm.iter().map(|p| p.clone()));
                 }
                 if let Some(hd) = al_list.get("headers").and_then(|h| h.as_sequence()) {
