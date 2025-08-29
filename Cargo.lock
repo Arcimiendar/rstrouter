@@ -2467,7 +2467,7 @@ dependencies = [
 [[package]]
 name = "rstmytype"
 version = "0.1.0"
-source = "git+https://github.com/Arcimiendar/rstmytype.git#206ec00920b02c830fb734852ac7d19a9feae8ae"
+source = "git+https://github.com/Arcimiendar/rstmytype.git#25ec897b37b86f0a2bd74ff968c508a48b99f135"
 dependencies = [
  "convert_case",
  "log",

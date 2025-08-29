@@ -1,6 +1,6 @@
 use log::warn;
 use rstmytype::{ApiEndpoint, ApiEndpointMethod, ApiProject};
-use serde_yaml_ng::{self, Value as YmlValue};
+use serde_yaml_ng::{Mapping as YmlMapping, Value as YmlValue};
 use std::ffi::OsStr;
 use std::fs::{DirEntry, read_dir, read_to_string};
 use std::path::PathBuf;
@@ -16,8 +16,8 @@ pub struct Endpoint {
     pub tag: String,
     pub url_path: String,
     pub method: ApiEndpointMethod,
-    pub content: String,
     pub yml_content: YmlValue,
+    pub merged_declaration: String
 }
 
 #[derive(Debug)]
@@ -39,7 +39,7 @@ impl ApiEndpoint for Endpoint {
     }
 
     fn get_yml_declaration_str(&self) -> Option<&str> {
-        Some(&self.content)
+        return Some(&self.merged_declaration);
     }
 }
 
@@ -171,14 +171,94 @@ impl Endpoint {
             return None;
         };
 
-        Some(Self {
+        let mut obj = Self {
             guards: guards.clone(),
             tag: tag.to_str()?.to_string(),
             method,
-            content,
             yml_content: yml_content,
             url_path,
-        })
+            merged_declaration: "".into(),
+        };
+
+        obj.merge_declaration();
+
+        Some(obj)
+    }
+
+    fn merge_declaration(&mut self) {
+        // make it called declaration
+        let mut declaration = Self::merge_two_declarations(&self.yml_content.clone(), &YmlValue::Null);
+        for guard in &self.guards {
+            declaration = Self::merge_two_declarations(&declaration, &guard.yml_content);
+        }
+        
+        self.merged_declaration = serde_yaml_ng::to_string(&declaration).unwrap_or("".into());
+    }
+
+    fn merge_two_declarations(decl_l: &YmlValue, decl_r: &YmlValue) -> YmlValue {
+
+        let (map1, map2) = (decl_l.as_mapping(), decl_r.as_mapping());
+
+        let m1 = map1
+            .iter()
+            .flat_map(|m| m.values());
+        let m2 = map2
+            .iter()
+            .flat_map(|m| m.values());
+        let combined_map = m1
+            .chain(m2)
+            .flat_map(|v| {
+                let call = v.get("call")?.as_str()?;
+                if call != "declare" {
+                    return None;
+                }
+                Some(v)
+            });
+        // todo implement response 
+        // todo implement path
+        let mut description = "".to_string();
+        let mut params: Vec<YmlValue> = Vec::new();
+        let mut headers: Vec<YmlValue> = Vec::new();
+        let mut body = YmlValue::Null;
+        for val in combined_map {
+            if let Some(descr) = val.get("description").and_then(|f| f.as_str()) {
+                if description.len() > 0 {
+                    description.push_str("; ");
+                }
+                description.push_str(descr);
+            }
+
+            if let Some(al_list) = val.get("allowlist") {
+                if let Some(pm) = al_list.get("params").and_then(|p| p.as_sequence()) {
+                    params.extend(pm.iter().map(|p| p.clone()));
+                }
+                if let Some(pm) = al_list.get("query").and_then(|p| p.as_sequence()) {
+                    params.extend(pm.iter().map(|p| p.clone()));
+                }
+                if let Some(hd) = al_list.get("headers").and_then(|h| h.as_sequence()) {
+                    headers.extend(hd.iter().map(|h| h.clone()));
+                }
+                if let Some(bd) = al_list.get("body") {
+                    if body.is_null() && !bd.is_null(){
+                        // todo implement merge body. Right now the first body will be accounted
+                        body = bd.clone();
+                    }
+                }
+            }
+        }
+        let declare_task = YmlValue::Mapping(YmlMapping::from_iter([
+            (YmlValue::String("call".into()), YmlValue::String("declare".into())),
+            (YmlValue::String("description".into()), YmlValue::String(description)),
+            (YmlValue::String("allowlist".into()), YmlValue::Mapping(YmlMapping::from_iter([
+                (YmlValue::String("params".into()), YmlValue::Sequence(params)),
+                (YmlValue::String("headers".into()), YmlValue::Sequence(headers)),
+                (YmlValue::String("body".into()), body),
+            ]))),
+        ]));
+
+        YmlValue::Mapping(YmlMapping::from_iter([
+            (YmlValue::String("declaration".into()), declare_task)
+        ]))
     }
 }
 

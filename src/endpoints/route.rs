@@ -39,11 +39,6 @@ mod test {
                 tag: "some".to_string(),
                 url_path: "/some/".to_string(),
                 method: rstmytype::ApiEndpointMethod::Get,
-                content: r#"
-                    test: 
-                      return: ok
-                "#
-                .to_string(),
                 yml_content: serde_yaml_ng::from_str(
                     r#"
                       test:
@@ -51,17 +46,13 @@ mod test {
                     "#,
                 )
                 .unwrap(),
+                merged_declaration: "".into(),
             },
             Endpoint {
                 guards: vec![],
                 tag: "some".to_string(),
                 url_path: "/some/".to_string(),
                 method: rstmytype::ApiEndpointMethod::Post,
-                content: r#"
-                    test: 
-                      return: ok
-                "#
-                .to_string(),
                 yml_content: serde_yaml_ng::from_str(
                     r#"
                       test:
@@ -69,6 +60,7 @@ mod test {
                     "#,
                 )
                 .unwrap(),
+                merged_declaration: "".into(),
             },
         ];
 

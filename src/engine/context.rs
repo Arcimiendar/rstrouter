@@ -95,6 +95,7 @@ fn build_incoming_from_request(request: Request, context: &mut JsContext) -> JsO
 
 impl LocalContext {
     pub fn from_request(request: Request) -> Self {
+        // TODO implement path parsing? 
         let mut context = JsContext::default();
 
         let obj = build_incoming_from_request(request, &mut context);
