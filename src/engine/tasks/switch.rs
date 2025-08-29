@@ -141,6 +141,7 @@ mod test {
                 "http://localhost:8090/test",
             )
             .unwrap(),
+            "./unittest_dsl",
         );
 
         context.evaluate_expr(&Context::wrap_js_code("var some = 1;"));

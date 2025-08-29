@@ -60,6 +60,7 @@ impl TaskTree {
 pub struct Engine {
     guards: Vec<TaskTree>,
     tree: TaskTree,
+    dsl_path: String,
 }
 
 pub struct EngineResponse(pub JsonValue, pub u16);
@@ -75,7 +76,7 @@ impl IntoResponse for EngineResponse {
 }
 
 impl Engine {
-    pub fn from_endpoint(endpoint: &Endpoint) -> Self {
+    pub fn from_endpoint(endpoint: &Endpoint, dsl_path: &str) -> Self {
         Self {
             guards: endpoint
                 .guards
@@ -83,18 +84,20 @@ impl Engine {
                 .map(|g| TaskTree::from_yml(&g.yml_content))
                 .collect(),
             tree: TaskTree::from_yml(&endpoint.yml_content),
+            dsl_path: dsl_path.to_string(),
         }
     }
 
-    pub fn from_template(template: &YmlValue) -> Self {
+    pub fn from_template(template: &YmlValue, dsl_path: &str) -> Self {
         Self {
             guards: vec![],
             tree: TaskTree::from_yml(&template),
+            dsl_path: dsl_path.to_string(),
         }
     }
 
     pub async fn execute(&self, request: Request) -> EngineResponse {
-        let mut context = Context::from_request(request);
+        let mut context = Context::from_request(request, &self.dsl_path);
         for guard in &self.guards {
             context = guard.walk_through(context).await;
             let return_value = context.get_return_value();
@@ -143,6 +146,7 @@ mod test {
                 "#,
             )
             .unwrap(),
+            "./unittest_dsl",
         );
 
         let res = engine
@@ -194,7 +198,7 @@ mod test {
             merged_declaration: "".into(),
         };
 
-        let engine = Engine::from_endpoint(&endpoint);
+        let engine = Engine::from_endpoint(&endpoint, "./unittest_dsl");
 
         let res = engine
             .execute(

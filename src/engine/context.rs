@@ -94,7 +94,7 @@ fn build_incoming_from_request(request: Request, context: &mut JsContext) -> JsO
 }
 
 impl LocalContext {
-    pub fn from_request(request: Request) -> Self {
+    pub fn from_request(request: Request, dsl_path: &str) -> Self {
         // TODO implement path parsing? 
         let mut context = JsContext::default();
 
@@ -110,13 +110,9 @@ impl LocalContext {
             context: RefCell::new(context),
         };
 
-        // TODO: make it passable from params.
-        let args = crate::args::types::get_args();
-        let dsl = args.dsl_path;
-
         ctx.evaluate_expr(&Context::wrap_js_code(&format!(
             "var dsl = {}",
-            JsonValue::String(dsl)
+            JsonValue::String(dsl_path.to_string())
         )));
         ctx
     }
@@ -199,12 +195,13 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn from_request(request: Request) -> Self {
+    pub fn from_request(request: Request, dsl_path: &str) -> Self {
         let (tx, rx) = mpsc::channel::<Command>();
         let (tx_b, rx_b) = mpsc::channel::<Reply>();
-
+        let dsl_path_thread_local = dsl_path.to_string();
         let thread = thread::spawn(move || {
-            let ctx = LocalContext::from_request(request);
+
+            let ctx = LocalContext::from_request(request, &dsl_path_thread_local);
 
             for command in rx.iter() {
                 match command {
@@ -317,6 +314,7 @@ mod test {
                 "http://localhost:8090/test?a=b",
             )
             .unwrap(),
+            "./unittest_dsl",
         );
 
         let res = context.evaluate_expr("1 ${incoming.params.a}");

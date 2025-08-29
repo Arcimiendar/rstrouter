@@ -100,6 +100,7 @@ mod test {
                 "http://localhost:8090/test",
             )
             .unwrap(),
+            "./unittest_dsl",
         );
 
         task.execute(context).await;

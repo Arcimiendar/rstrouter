@@ -269,6 +269,7 @@ mod test {
                 "http://localhost:8090/test",
             )
             .unwrap(),
+            "./unittest_dsl",
         );
 
         let yml: YmlValue = serde_yaml_ng::from_str(

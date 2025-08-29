@@ -85,7 +85,11 @@ impl Task for Template {
             .ok()
             .and_then(|s| serde_yaml_ng::from_str(&s).ok())
             .unwrap_or(YmlValue::Null);
-        let internal_engine = Engine::from_template(&template);
+        let dsl_val = context.evaluate_expr("${dsl}");
+        // will never be the value from the unwrap_or "./unittest_dsl here, because the value is always there
+        let dsl_path = dsl_val.as_str().unwrap_or("./unittest_dsl"); 
+
+        let internal_engine = Engine::from_template(&template, dsl_path);
 
         if let Some(request) = self.create_request(&context, rendered_path) {
             let result = internal_engine.execute(request).await;
@@ -193,6 +197,7 @@ mod test {
                 "http://localhost:8090/test",
             )
             .unwrap(),
+            "./unittest_dsl",
         );
 
         let res = task.execute(context).await;

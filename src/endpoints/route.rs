@@ -7,11 +7,11 @@ use crate::endpoints::parser::Endpoint;
 use crate::endpoints::types::Request as LocalRequest;
 use crate::engine::Engine;
 
-pub fn get_route(chunk: Vec<&Endpoint>) -> MethodRouter {
+pub fn get_route(chunk: Vec<&Endpoint>, dsl_path: &str) -> MethodRouter {
     let mut method_router = MethodRouter::new();
 
     for endpoint in chunk {
-        let engine = Arc::new(Engine::from_endpoint(endpoint));
+        let engine = Arc::new(Engine::from_endpoint(endpoint, dsl_path));
 
         if endpoint.method == ApiEndpointMethod::Get {
             method_router = method_router.get(|q: Request| async move {
@@ -65,7 +65,7 @@ mod test {
         ];
 
         let endpoitns = endpoints_owned.iter().collect();
-        let r = get_route(endpoitns);
+        let r = get_route(endpoitns, "./unittest_dsl");
         drop(r);
     }
 }

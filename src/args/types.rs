@@ -78,13 +78,13 @@ mod test {
     fn test_validate_log_config() {
         assert!(validate_log_config("./dummy.json").is_ok());
         assert!(validate_log_config("./not_exists.json").is_err());
-        assert!(validate_log_config("./test_dsl").is_err());
+        assert!(validate_log_config("./unittest_dsl").is_err());
     }
 
     #[test]
     fn test_validate_dsl_path() {
         assert!(validate_dsl_path("./dummy.rs").is_err());
         assert!(validate_dsl_path("./not_exists.json").is_err());
-        assert!(validate_dsl_path("./test_dsl").is_ok());
+        assert!(validate_dsl_path("./unittest_dsl").is_ok());
     }
 }
