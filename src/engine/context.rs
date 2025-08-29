@@ -1,9 +1,7 @@
 use boa_engine::{Context as JsContext, JsObject, JsString, JsValue, Source, property};
 use log::{debug, warn};
-use serde_json::{Value as JsonValue, json};
-use serde_urlencoded;
+use serde_json::{json, Value as JsonValue};
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::sync::{Mutex, mpsc};
 use std::thread;
 
@@ -48,11 +46,9 @@ fn build_headers(request: &Request, context: &mut JsContext) -> JsObject {
 
 fn build_params(request: &Request, context: &mut JsContext) -> JsObject {
     let obj = JsObject::with_null_proto();
-    let query_params_str = request.uri().query().unwrap_or("");
-    let query_params: HashMap<String, String> =
-        serde_urlencoded::from_str(query_params_str).unwrap_or_default();
+    let query_params = request.query();
     for (k, v) in query_params {
-        obj.set(JsString::from(k), JsString::from(v), false, context)
+        obj.set(JsString::from(k.to_string()), JsString::from(v.to_string()), false, context)
             .ok();
     }
 
@@ -307,11 +303,12 @@ mod test {
     #[test]
     fn test_context() {
         let headers = HashMap::from([("test".to_string(), "1234".to_string())]);
+        let query = HashMap::from([("a".to_string(), "b".to_string())]);
         let context = Context::from_request(
             Request::new(
                 headers,
                 json!({"a" : ["c"]}),
-                "http://localhost:8090/test?a=b",
+                query,
             )
             .unwrap(),
             "./unittest_dsl",

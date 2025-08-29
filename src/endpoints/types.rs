@@ -2,28 +2,32 @@ use std::{collections::HashMap, error::Error, str::FromStr};
 
 use axum::{
     extract::{FromRequest, Json, Request as AxumRequest},
-    http::{HeaderMap, HeaderName, HeaderValue, Uri},
+    http::{HeaderMap, HeaderName, HeaderValue},
 };
 use serde_json::Value as JsonValue;
 
+#[derive(Default)]
 pub struct Request {
-    r_uri: Uri,
+    r_query: HashMap<String, String>,
     r_header: HeaderMap,
     r_body: JsonValue,
 }
 
 impl Request {
     pub async fn from_request(r: AxumRequest) -> Self {
-        let state_val = false;
         let headers = r.headers().clone();
-        let uri = r.uri().clone();
-        let js_val = Json::from_request(r, &state_val)
+
+        let query_params_str = r.uri().query().unwrap_or("");
+        let query_params: HashMap<String, String> =
+            serde_urlencoded::from_str(query_params_str).unwrap_or_default();
+
+        let js_val = Json::from_request(r, &())
             .await
             .map(|js: Json<_>| js.0)
             .unwrap_or(JsonValue::Null);
 
         Self {
-            r_uri: uri,
+            r_query: query_params,
             r_header: headers,
             r_body: js_val,
         }
@@ -32,10 +36,10 @@ impl Request {
     pub fn new(
         headers: HashMap<String, String>,
         body: JsonValue,
-        uri: &str,
+        query: HashMap<String, String>,
     ) -> Result<Self, Box<dyn Error>> {
         Ok(Self {
-            r_uri: Uri::from_str(uri)?,
+            r_query: query,
             r_header: headers
                 .iter()
                 .flat_map(|(k, v)| {
@@ -53,8 +57,8 @@ impl Request {
         &self.r_header
     }
 
-    pub fn uri(&self) -> &Uri {
-        &self.r_uri
+    pub fn query(&self) -> &HashMap<String, String> {
+        &self.r_query
     }
 
     pub fn body(&self) -> &JsonValue {
@@ -74,15 +78,16 @@ mod test {
         let request = Request::new(
             HashMap::from([("test".to_string(), "1234".to_string())]),
             json!({"obj": 1234}),
-            "http://localhost:8090/test?a=b&c=d",
+            HashMap::from([("a".into(), "b".into()), ("c".into(), "d".into())]),
         )
         .unwrap();
 
         let headers = request.headers();
         assert_eq!(headers.get("test").unwrap(), "1234");
 
-        let uri = request.uri();
-        assert_eq!(uri.to_string(), "http://localhost:8090/test?a=b&c=d");
+        let query = request.query();
+        assert_eq!(query.get("a").unwrap(), "b");
+        assert_eq!(query.get("c").unwrap(), "d");
 
         let body = request.body().clone();
         assert_eq!(body, json!({"obj": 1234}));
@@ -105,7 +110,16 @@ mod test {
         let headers = request.headers();
         assert_eq!(headers.get("some_h").unwrap(), "hh");
 
-        let uri = request.uri();
-        assert_eq!(uri.to_string(), "http://localhost:8090/test?aa=bb&cc=dd");
+        let query = request.query();
+        assert_eq!(query.get("aa").unwrap(), "bb");
+        assert_eq!(query.get("cc").unwrap(), "dd");
+    }
+
+    #[test]
+    fn test_default() {
+        let req = Request::default();
+        assert!(req.query().is_empty());
+        assert!(req.headers().is_empty());
+        assert!(req.body().is_null());
     }
 }

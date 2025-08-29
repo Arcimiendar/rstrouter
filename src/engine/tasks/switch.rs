@@ -90,9 +90,7 @@ mod test {
             tasks::{switch::SwitchFactory, task::TaskFactory},
         },
     };
-    use serde_json::Value as JsonValue;
     use serde_yaml_ng::Value as YmlValue;
-    use std::collections::HashMap;
 
     #[test]
     fn factory_returns_none() {
@@ -135,12 +133,7 @@ mod test {
             .unwrap();
 
         let context = Context::from_request(
-            Request::new(
-                HashMap::new(),
-                JsonValue::Null,
-                "http://localhost:8090/test",
-            )
-            .unwrap(),
+            Request::default(),
             "./unittest_dsl",
         );
 

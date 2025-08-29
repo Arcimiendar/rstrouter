@@ -2493,7 +2493,6 @@ dependencies = [
  "serde_urlencoded",
  "serde_yaml_ng",
  "tokio",
- "url",
  "utoipa-swagger-ui",
 ]
 

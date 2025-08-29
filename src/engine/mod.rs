@@ -132,9 +132,9 @@ mod test {
         },
         engine::Engine,
     };
-    use axum::response::IntoResponse;
-    use serde_json::{Value as JsonValue, json};
     use std::collections::HashMap;
+    use axum::response::IntoResponse;
+    use serde_json::{json, Value as JsonValue};
 
     #[tokio::test]
     async fn test_from_template() {
@@ -151,12 +151,7 @@ mod test {
 
         let res = engine
             .execute(
-                Request::new(
-                    HashMap::new(),
-                    JsonValue::Null,
-                    "http://localhost:8090/test",
-                )
-                .unwrap(),
+                Request::default(),
             )
             .await;
 
@@ -202,12 +197,7 @@ mod test {
 
         let res = engine
             .execute(
-                Request::new(
-                    HashMap::new(),
-                    JsonValue::Null,
-                    "http://localhost:8090/test",
-                )
-                .unwrap(),
+                Request::default(),
             )
             .await;
 
@@ -219,7 +209,7 @@ mod test {
                 Request::new(
                     HashMap::new(),
                     JsonValue::Null,
-                    "http://localhost:8090/test?error=error",
+                    HashMap::from([("error".to_string(), "error".to_string())]),
                 )
                 .unwrap(),
             )

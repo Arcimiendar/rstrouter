@@ -55,8 +55,6 @@ mod test {
             tasks::{declaration::DeclarationFactory, task::TaskFactory},
         },
     };
-    use serde_json::Value as JsonValue;
-    use std::collections::HashMap;
 
     #[test]
     fn test_task_is_not_parsed() {
@@ -94,12 +92,7 @@ mod test {
         let task = obj.unwrap();
 
         let context = Context::from_request(
-            Request::new(
-                HashMap::new(),
-                JsonValue::Null,
-                "http://localhost:8090/test",
-            )
-            .unwrap(),
+            Request::default(),
             "./unittest_dsl",
         );
 

@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use serde_yaml_ng::Value as YmlValue;
-use url::form_urlencoded;
 
 use crate::endpoints::types::Request;
 use crate::engine::Engine;
@@ -91,7 +90,7 @@ impl Task for Template {
 
         let internal_engine = Engine::from_template(&template, dsl_path);
 
-        if let Some(request) = self.create_request(&context, rendered_path) {
+        if let Some(request) = self.create_request(&context) {
             let result = internal_engine.execute(request).await;
             if let Some(r) = &self.result {
                 context.evaluate_expr(&Context::wrap_js_code(&format!(
@@ -111,7 +110,7 @@ impl Task for Template {
 }
 
 impl Template {
-    fn create_request(&self, context: &Context, template_path: &str) -> Option<Request> {
+    fn create_request(&self, context: &Context) -> Option<Request> {
         let body = render_obj(&self.body, context);
         let headers = self
             .headers
@@ -124,16 +123,10 @@ impl Template {
             .query
             .iter()
             .map(|(k, v)| (k.to_string(), context.evaluate_expr(v)))
-            .flat_map(|(k, v)| Some((k, v.as_str()?.to_string())));
+            .flat_map(|(k, v)| Some((k, v.as_str()?.to_string())))
+            .collect();
 
-        let params = form_urlencoded::Serializer::new(String::new())
-            .extend_pairs(query)
-            .finish();
-
-        // todo: redo it, so that request stores url string and query params hasmap instead of Uri struct
-        let uri = format!("http://internal/{}?{}", template_path, params);
-
-        Request::new(headers, body, &uri).ok()
+        Request::new(headers, body, query).ok()
     }
 }
 
@@ -146,8 +139,7 @@ mod test {
             tasks::{task::TaskFactory, template::TemplateFactory},
         },
     };
-    use serde_json::{Value as JsonValue, json};
-    use std::collections::HashMap;
+    use serde_json::{json};
 
     #[test]
     fn test_task_is_not_parsed() {
@@ -191,12 +183,7 @@ mod test {
         let task = obj.unwrap();
 
         let context = Context::from_request(
-            Request::new(
-                HashMap::new(),
-                JsonValue::Null,
-                "http://localhost:8090/test",
-            )
-            .unwrap(),
+            Request::default(),
             "./unittest_dsl",
         );
 

@@ -217,8 +217,7 @@ mod test {
         },
     };
     use httpmock::{Method, prelude::*};
-    use serde_json::{Value as JsonValue, json};
-    use std::collections::HashMap;
+    use serde_json::{json};
 
     #[test]
     fn factory_returns_none() {
@@ -287,12 +286,7 @@ mod test {
             let task = obj.unwrap();
 
             let context = Context::from_request(
-                Request::new(
-                    HashMap::new(),
-                    JsonValue::Null,
-                    "http://localhost:8090/test",
-                )
-                .unwrap(),
+                Request::default(),
                 "./unittest_dsl",
             );
 
@@ -341,12 +335,7 @@ mod test {
         let task = obj.unwrap();
 
         let context = Context::from_request(
-            Request::new(
-                HashMap::new(),
-                JsonValue::Null,
-                "http://localhost:8090/test",
-            )
-            .unwrap(),
+            Request::default(),
             "./unittest_dsl",
         );
 

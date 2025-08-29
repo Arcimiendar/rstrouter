@@ -59,8 +59,6 @@ impl Task for Ret {
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashMap;
-
     use crate::{
         endpoints::types::Request,
         engine::{
@@ -68,7 +66,6 @@ mod test {
             tasks::{ret::RetFactory, task::TaskFactory},
         },
     };
-    use serde_json::Value as JsonValue;
 
     #[test]
     fn factory_returns_none() {
@@ -123,12 +120,7 @@ mod test {
             .unwrap();
 
         let context = Context::from_request(
-            Request::new(
-                HashMap::new(),
-                JsonValue::Null,
-                "http://localhost:8090/test",
-            )
-            .unwrap(),
+            Request::default(),
             "./unittest_dsl",
         );
 
@@ -155,12 +147,7 @@ mod test {
             .unwrap();
 
         let context = Context::from_request(
-            Request::new(
-                HashMap::new(),
-                JsonValue::Null,
-                "http://localhost:8090/test",
-            )
-            .unwrap(),
+            Request::default(),
             "./unittest_dsl",
         );
 
@@ -186,12 +173,7 @@ mod test {
             .unwrap();
 
         let context = Context::from_request(
-            Request::new(
-                HashMap::new(),
-                JsonValue::Null,
-                "http://localhost:8090/test",
-            )
-            .unwrap(),
+            Request::default(),
             "./unittest_dsl",
         );
 
@@ -232,12 +214,7 @@ mod test {
             .unwrap();
 
         let context = Context::from_request(
-            Request::new(
-                HashMap::new(),
-                JsonValue::Null,
-                "http://localhost:8090/test",
-            )
-            .unwrap(),
+            Request::default(),
             "./unittest_dsl",
         );
 

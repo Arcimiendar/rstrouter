@@ -128,9 +128,7 @@ mod test {
             tasks::task::{preprocess_obj, render_obj},
         },
     };
-    use serde_json::Value as JsonValue;
     use serde_yaml_ng::Value as YmlValue;
-    use std::collections::HashMap;
     use std::env;
 
     #[test]
@@ -263,12 +261,7 @@ mod test {
     #[test]
     fn render_obj_test() {
         let context = Context::from_request(
-            Request::new(
-                HashMap::new(),
-                JsonValue::Null,
-                "http://localhost:8090/test",
-            )
-            .unwrap(),
+            Request::default(),
             "./unittest_dsl",
         );
 
