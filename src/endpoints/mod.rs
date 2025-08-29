@@ -12,6 +12,7 @@ mod route;
 pub mod types;
 
 pub fn load_swagger(mut app: Router, collection: &EndpointsCollection) -> Router {
+    // todo: merge guards and endpoints allowlists to get headers or other declarations
     app = app.merge(SwaggerUi::new("/docs").url("/docs/openapi.json", build_open_api(collection)));
 
     app
