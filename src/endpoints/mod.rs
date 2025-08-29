@@ -29,7 +29,10 @@ pub fn load_dsl_endpoints(args: &crate::args::types::Args, mut app: Router) -> R
         app = app.route(&key, get_route(chunk, &args.dsl_path));
     }
 
-    app = load_swagger(app, &collection);
+    if !args.disable_swagger {
+        info!("Loading swagger and building types");
+        app = load_swagger(app, &collection);
+    }
 
     app
 }

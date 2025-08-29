@@ -132,10 +132,7 @@ mod test {
 
         let task = obj.unwrap();
 
-        let context = Context::from_request(
-            Request::default(),
-            "./unittest_dsl",
-        );
+        let context = Context::from_request(Request::default(), "./unittest_dsl");
 
         let res = task.execute(context).await;
         let ctx = res.0;

@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use log::warn;
 use rstmytype::{ApiEndpoint, ApiEndpointMethod, ApiProject};
 use serde_yaml_ng::{Mapping as YmlMapping, Value as YmlValue};
@@ -17,7 +18,7 @@ pub struct Endpoint {
     pub url_path: String,
     pub method: ApiEndpointMethod,
     pub yml_content: YmlValue,
-    pub merged_declaration: String
+    pub merged_declaration: String,
 }
 
 #[derive(Debug)]
@@ -187,34 +188,28 @@ impl Endpoint {
 
     fn merge_declaration(&mut self) {
         // make it called declaration
-        let mut declaration = Self::merge_two_declarations(&self.yml_content.clone(), &YmlValue::Null);
+        let mut declaration =
+            Self::merge_two_declarations(&self.yml_content.clone(), &YmlValue::Null);
         for guard in &self.guards {
             declaration = Self::merge_two_declarations(&declaration, &guard.yml_content);
         }
-        
+
         self.merged_declaration = serde_yaml_ng::to_string(&declaration).unwrap_or("".into());
     }
 
     fn merge_two_declarations(decl_l: &YmlValue, decl_r: &YmlValue) -> YmlValue {
-
         let (map1, map2) = (decl_l.as_mapping(), decl_r.as_mapping());
 
-        let m1 = map1
-            .iter()
-            .flat_map(|m| m.values());
-        let m2 = map2
-            .iter()
-            .flat_map(|m| m.values());
-        let combined_map = m1
-            .chain(m2)
-            .flat_map(|v| {
-                let call = v.get("call")?.as_str()?;
-                if call != "declare" {
-                    return None;
-                }
-                Some(v)
-            });
-        // todo implement response 
+        let m1 = map1.iter().flat_map(|m| m.values());
+        let m2 = map2.iter().flat_map(|m| m.values());
+        let combined_map = m1.chain(m2).flat_map(|v| {
+            let call = v.get("call")?.as_str()?;
+            if call != "declare" {
+                return None;
+            }
+            Some(v)
+        });
+        // todo implement response
         // todo implement path
         let mut description = "".to_string();
         let mut params: Vec<YmlValue> = Vec::new();
@@ -241,10 +236,11 @@ impl Endpoint {
                     headers.extend(hd.iter().map(|h| h.clone()));
                 }
                 if let Some(bd) = al_list.get("body") {
-                    if body.is_null() && !bd.is_null(){
+                    if body.is_null() && !bd.is_null() {
                         body = bd.clone();
+                    } else {
+                        body = Self::merge_two_body(&body, bd);
                     }
-                    body = Self::merge_two_body(&body, bd);
                 }
             }
         }
@@ -253,18 +249,34 @@ impl Endpoint {
         let params = Self::remove_fields_duplicate(params);
 
         let declare_task = YmlValue::Mapping(YmlMapping::from_iter([
-            (YmlValue::String("call".into()), YmlValue::String("declare".into())),
-            (YmlValue::String("description".into()), YmlValue::String(description)),
-            (YmlValue::String("allowlist".into()), YmlValue::Mapping(YmlMapping::from_iter([
-                (YmlValue::String("params".into()), YmlValue::Sequence(params)),
-                (YmlValue::String("headers".into()), YmlValue::Sequence(headers)),
-                (YmlValue::String("body".into()), body),
-            ]))),
+            (
+                YmlValue::String("call".into()),
+                YmlValue::String("declare".into()),
+            ),
+            (
+                YmlValue::String("description".into()),
+                YmlValue::String(description),
+            ),
+            (
+                YmlValue::String("allowlist".into()),
+                YmlValue::Mapping(YmlMapping::from_iter([
+                    (
+                        YmlValue::String("params".into()),
+                        YmlValue::Sequence(params),
+                    ),
+                    (
+                        YmlValue::String("headers".into()),
+                        YmlValue::Sequence(headers),
+                    ),
+                    (YmlValue::String("body".into()), body),
+                ])),
+            ),
         ]));
 
-        YmlValue::Mapping(YmlMapping::from_iter([
-            (YmlValue::String("declaration".into()), declare_task)
-        ]))
+        YmlValue::Mapping(YmlMapping::from_iter([(
+            YmlValue::String("declaration".into()),
+            declare_task,
+        )]))
     }
 
     fn remove_fields_duplicate(to_remove: Vec<YmlValue>) -> Vec<YmlValue> {
@@ -272,7 +284,8 @@ impl Endpoint {
         let mut new_vec = Vec::with_capacity(to_remove.len());
         let mut used_indices = Vec::with_capacity(to_remove.len());
         for (i, val_l) in to_remove.iter().enumerate() {
-            if used_indices.contains(&i) { // was alredy merged
+            if used_indices.contains(&i) {
+                // was alredy merged
                 continue;
             }
             let mut val_l_to_merge = val_l.clone();
@@ -281,7 +294,10 @@ impl Endpoint {
                 let name_l_opt = val_l.get("field").and_then(|f| f.as_str());
                 let name_r_opt = val_r.get("field").and_then(|f| f.as_str());
 
-                if let Some(name_l) = name_l_opt && let Some(name_r) = name_r_opt && name_l == name_r {
+                if let Some(name_l) = name_l_opt
+                    && let Some(name_r) = name_r_opt
+                    && name_l == name_r
+                {
                     val_l_to_merge = Self::merge_two_body(&val_l_to_merge, val_r);
                     used_indices.push(ii);
                 }
@@ -304,137 +320,191 @@ impl Endpoint {
         }
 
         if b_left.is_sequence() && b_right.is_mapping() {
-            let mut b_right_copy = b_right.clone();
-
-            let mut merged_fields = b_left.clone();
-
-            if let Some(fields) = b_right_copy.get("fields") {
-                merged_fields = Self::merge_two_body(b_left, fields);
-            }
-
-            if let Some(m) = b_right_copy.as_mapping_mut() {
-                m.insert(YmlValue::String("fields".into()), merged_fields);
-            }
-            return b_right_copy;
+            return Self::merge_seq_with_map(b_left, b_right);
         }
 
         if b_left.is_mapping() && b_right.is_sequence() {
-            return Self::merge_two_body(b_right, b_left);
+            return Self::merge_seq_with_map(b_right, b_left);
         }
 
         if b_left.is_mapping() && b_right.is_mapping() {
-            let type_left = b_left.get("type").and_then(|v| v.as_str()).unwrap_or("string");
-            let type_right = b_right.get("type").and_then(|v| v.as_str()).unwrap_or("string");
-
-            if type_left != type_right {
-                warn!("can't merge types of body: {:?} and {:?}; returning left", b_left, b_right);
-                return b_left.clone();
-            }
-            
-            let mut type_copy = b_left.clone();
-
-            if type_left == "array" {
-                let l_items_opt = b_left.get("items");
-                let r_items_opt = b_right.get("items");
-                
-                let merged_items_opt = l_items_opt.iter()
-                    .chain(r_items_opt.iter())
-                    .filter(|v| {
-                        if !v.is_mapping() {
-                            warn!("Array items can be mapping only! Got {:?}", v);
-                        }
-                        v.is_mapping()
-                    }) // only mapping is allowed for items
-                    .map(|v| (*v).clone())
-                    .reduce(|a, b| Self::merge_two_body(&a, &b));
-
-                if let Some(merged_items) = merged_items_opt {
-                    // if atleast one items is there
-                    if let Some(m) = type_copy.as_mapping_mut() {
-                        // alway true
-                        m.insert(YmlValue::String("items".into()), merged_items);
-                    }
-                }
-            }
-
-            if type_left == "object" {
-                let l_fields_opt = b_left.get("fields");
-                let r_fields_opt = b_right.get("fields");
-
-                let merged_fields_opt = l_fields_opt.iter()
-                    .chain(r_fields_opt.iter())
-                    .filter(|v| { 
-                        if !v.is_sequence() {
-                            warn!("Object fields is not sequence! Obj: {:?}", v);
-                        }
-                        v.is_sequence()
-                    }) // fields sequence is only allowed fields type
-                    .map(|v| (*v).clone())
-                    .reduce(|a, b| Self::merge_two_body(&a, &b));
-                if let Some(merged_fields) = merged_fields_opt {
-                    // if at least one fields is presented and is sequence
-                    if let Some(m) = type_copy.as_mapping_mut() {
-                        // always true
-                        m.insert(YmlValue::String("fields".into()), merged_fields);
-                    }
-                }
-                
-            }
-
-            let description_l = b_left.get("description");
-            let description_r = b_right.get("description");
-            
-            let description_opt = description_l
-                .iter()
-                .chain(description_r.iter())
-                .flat_map(|v| v.as_str())
-                .map(|s| s.to_string())
-                .reduce(|d1, d2| {
-                    let mut res = String::with_capacity(d1.len() + d2.len() + "; ".len());
-
-                    res.push_str(&d1);
-                    res.push_str("; ");
-                    res.push_str(&d2);
-                    
-                    res
-                });
-
-            // todo: merge enums
-            if let Some(description) = description_opt {
-                if let Some(m) = type_copy.as_mapping_mut() {
-                    m.insert(YmlValue::String("description".to_string()), YmlValue::String(description));
-                }
-            }
-
-            return type_copy;
-        }   
-
-        if b_left.is_sequence() && b_right.is_sequence() {
-            // merge obj attrs
-            let default = Vec::with_capacity(0);
-            let bl_seq = b_left.as_sequence().unwrap_or(&default);
-            let br_seq = b_right.as_sequence().unwrap_or(&default);
-            
-            let new_seq = bl_seq
-                    .iter()
-                    .chain(br_seq)
-                    .map(|v| v.clone())
-                    .collect();
-
-            let new_seq = Self::remove_fields_duplicate(new_seq);
-
-            let new_body = YmlValue::Sequence(new_seq);
-            return new_body;
+            return Self::merge_mappings(b_left, b_right);
         }
 
+        if b_left.is_sequence() && b_right.is_sequence() {
+            return Self::merge_sequences(b_left, b_right);
+        }
 
-        warn!("bad types format pair: {:?} and {:?}. Returning left the most appropriete", b_left, b_right);
-        
+        warn!(
+            "bad types format pair: {:?} and {:?}. Returning left the most appropriete",
+            b_left, b_right
+        );
+
         if b_right.is_sequence() || b_right.is_mapping() {
             return b_left.clone();
         }
 
         return b_left.clone();
+    }
+
+    fn merge_seq_with_map(seq: &YmlValue, obj: &YmlValue) -> YmlValue {
+        let mut obj_copy = obj.clone();
+
+        let mut merged_fields = seq.clone();
+
+        if let Some(fields) = obj_copy.get("fields") {
+            merged_fields = Self::merge_two_body(&merged_fields, fields);
+        }
+
+        if let Some(m) = obj_copy.as_mapping_mut() {
+            m.insert(YmlValue::String("fields".into()), merged_fields);
+        }
+        return obj_copy;
+    }
+
+    fn merge_sequences(b_left: &YmlValue, b_right: &YmlValue) -> YmlValue {
+        // merge obj attrs
+        let default = Vec::with_capacity(0);
+        let bl_seq = b_left.as_sequence().unwrap_or(&default);
+        let br_seq = b_right.as_sequence().unwrap_or(&default);
+
+        let new_seq = bl_seq.iter().chain(br_seq).map(|v| v.clone()).collect();
+
+        let new_seq = Self::remove_fields_duplicate(new_seq);
+
+        let new_body = YmlValue::Sequence(new_seq);
+        return new_body;
+    }
+
+    fn merge_mappings(b_left: &YmlValue, b_right: &YmlValue) -> YmlValue {
+        let type_left = b_left
+            .get("type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("string");
+        let type_right = b_right
+            .get("type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("string");
+
+        if type_left != type_right {
+            warn!(
+                "can't merge types of body: {:?} and {:?}; returning left",
+                b_left, b_right
+            );
+            return b_left.clone();
+        }
+
+        let mut type_copy = b_left.clone();
+
+        if type_left == "array" {
+            Self::merge_mappings_type_array(b_left, b_right, &mut type_copy);
+        }
+
+        if type_left == "object" {
+            Self::merge_mappings_type_object(b_left, b_right, &mut type_copy);
+        }
+
+        Self::merge_mappings_descriptions(b_left, b_right, &mut type_copy);
+
+        Self::merge_mappings_enum(b_left, b_right, &mut type_copy);
+
+        return type_copy;
+    }
+
+    fn merge_mappings_type_array(b_left: &YmlValue, b_right: &YmlValue, into: &mut YmlValue) {
+        let l_items_opt = b_left.get("items");
+        let r_items_opt = b_right.get("items");
+
+        let merged_items_opt = l_items_opt
+            .iter()
+            .chain(r_items_opt.iter())
+            .filter(|v| {
+                if !v.is_mapping() {
+                    warn!("Array items can be mapping only! Got {:?}", v);
+                }
+                v.is_mapping()
+            }) // only mapping is allowed for items
+            .map(|v| (*v).clone())
+            .reduce(|a, b| Self::merge_two_body(&a, &b));
+
+        if let Some(merged_items) = merged_items_opt {
+            // if atleast one items is there
+            if let Some(m) = into.as_mapping_mut() {
+                // alway true
+                m.insert(YmlValue::String("items".into()), merged_items);
+            }
+        }
+    }
+
+    fn merge_mappings_type_object(b_left: &YmlValue, b_right: &YmlValue, into: &mut YmlValue) {
+        let l_fields_opt = b_left.get("fields");
+        let r_fields_opt = b_right.get("fields");
+
+        let merged_fields_opt = l_fields_opt
+            .iter()
+            .chain(r_fields_opt.iter())
+            .filter(|v| {
+                if !v.is_sequence() {
+                    warn!("Object fields is not sequence! Obj: {:?}", v);
+                }
+                v.is_sequence()
+            }) // fields sequence is only allowed fields type
+            .map(|v| (*v).clone())
+            .reduce(|a, b| Self::merge_two_body(&a, &b));
+        if let Some(merged_fields) = merged_fields_opt {
+            // if at least one fields is presented and is sequence
+            if let Some(m) = into.as_mapping_mut() {
+                // always true
+                m.insert(YmlValue::String("fields".into()), merged_fields);
+            }
+        }
+    }
+
+    fn merge_mappings_descriptions(b_left: &YmlValue, b_right: &YmlValue, into: &mut YmlValue) {
+        let description_l = b_left.get("description");
+        let description_r = b_right.get("description");
+
+        let description_opt = description_l
+            .iter()
+            .chain(description_r.iter())
+            .flat_map(|v| v.as_str())
+            .map(|s| s.to_string())
+            .reduce(|d1, d2| {
+                let mut res = String::with_capacity(d1.len() + d2.len() + "; ".len());
+
+                res.push_str(&d1);
+                res.push_str("; ");
+                res.push_str(&d2);
+
+                res
+            });
+
+        if let Some(description) = description_opt {
+            if let Some(m) = into.as_mapping_mut() {
+                m.insert(
+                    YmlValue::String("description".to_string()),
+                    YmlValue::String(description),
+                );
+            }
+        }
+    }
+
+    fn merge_mappings_enum(b_left: &YmlValue, b_right: &YmlValue, into: &mut YmlValue) {
+        let l_enum = b_left.get("enum").and_then(|es| es.as_sequence());
+        let r_enum = b_right.get("enum").and_then(|es| es.as_sequence());
+
+        let enums = l_enum
+            .iter()
+            .chain(r_enum.iter())
+            .flat_map(|v| v.iter())
+            .map(|v| v.clone())
+            .unique()
+            .collect();
+
+        if let Some(m) = into.as_mapping_mut() {
+            // always true
+            m.insert(YmlValue::String("enum".into()), YmlValue::Sequence(enums));
+        }
     }
 }
 

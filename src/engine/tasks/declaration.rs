@@ -91,10 +91,7 @@ mod test {
         assert!(obj.is_some());
         let task = obj.unwrap();
 
-        let context = Context::from_request(
-            Request::default(),
-            "./unittest_dsl",
-        );
+        let context = Context::from_request(Request::default(), "./unittest_dsl");
 
         task.execute(context).await;
     }

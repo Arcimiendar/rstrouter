@@ -45,6 +45,10 @@ pub struct Args {
     #[arg(short, long, env, default_value = "/DSL", value_parser = validate_dsl_path)]
     // #[arg(short, long, env, default_value = "./test_dsl", value_parser = validate_dsl_path)]
     pub dsl_path: String,
+
+    /// disable swagger (enabled by default)
+    #[arg(short = 'D', long, env, action)]
+    pub disable_swagger: bool,
 }
 
 pub fn get_args() -> Args {

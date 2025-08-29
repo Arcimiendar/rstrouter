@@ -119,10 +119,7 @@ mod test {
             )
             .unwrap();
 
-        let context = Context::from_request(
-            Request::default(),
-            "./unittest_dsl",
-        );
+        let context = Context::from_request(Request::default(), "./unittest_dsl");
 
         let res = task.execute(context).await;
         let res_v = res.0.get_return_value();
@@ -146,10 +143,7 @@ mod test {
             )
             .unwrap();
 
-        let context = Context::from_request(
-            Request::default(),
-            "./unittest_dsl",
-        );
+        let context = Context::from_request(Request::default(), "./unittest_dsl");
 
         let res = task.execute(context).await;
         let res_v = res.0.get_return_value();
@@ -172,10 +166,7 @@ mod test {
             )
             .unwrap();
 
-        let context = Context::from_request(
-            Request::default(),
-            "./unittest_dsl",
-        );
+        let context = Context::from_request(Request::default(), "./unittest_dsl");
 
         context.evaluate_expr(&Context::wrap_js_code("var some = {a: '123'};"));
 
@@ -213,10 +204,7 @@ mod test {
             )
             .unwrap();
 
-        let context = Context::from_request(
-            Request::default(),
-            "./unittest_dsl",
-        );
+        let context = Context::from_request(Request::default(), "./unittest_dsl");
 
         context.evaluate_expr(&Context::wrap_js_code("var some = {a: '123'};"));
 

@@ -132,9 +132,9 @@ mod test {
         },
         engine::Engine,
     };
-    use std::collections::HashMap;
     use axum::response::IntoResponse;
-    use serde_json::{json, Value as JsonValue};
+    use serde_json::{Value as JsonValue, json};
+    use std::collections::HashMap;
 
     #[tokio::test]
     async fn test_from_template() {
@@ -149,11 +149,7 @@ mod test {
             "./unittest_dsl",
         );
 
-        let res = engine
-            .execute(
-                Request::default(),
-            )
-            .await;
+        let res = engine.execute(Request::default()).await;
 
         assert_eq!(res.0, json!({"response": "ok"}));
     }
@@ -195,11 +191,7 @@ mod test {
 
         let engine = Engine::from_endpoint(&endpoint, "./unittest_dsl");
 
-        let res = engine
-            .execute(
-                Request::default(),
-            )
-            .await;
+        let res = engine.execute(Request::default()).await;
 
         assert_eq!(res.0, json!({"response": "ok"}));
         assert_eq!(res.1, 200);

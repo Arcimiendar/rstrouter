@@ -1,6 +1,6 @@
 use boa_engine::{Context as JsContext, JsObject, JsString, JsValue, Source, property};
 use log::{debug, warn};
-use serde_json::{json, Value as JsonValue};
+use serde_json::{Value as JsonValue, json};
 use std::cell::RefCell;
 use std::sync::{Mutex, mpsc};
 use std::thread;
@@ -48,8 +48,13 @@ fn build_params(request: &Request, context: &mut JsContext) -> JsObject {
     let obj = JsObject::with_null_proto();
     let query_params = request.query();
     for (k, v) in query_params {
-        obj.set(JsString::from(k.to_string()), JsString::from(v.to_string()), false, context)
-            .ok();
+        obj.set(
+            JsString::from(k.to_string()),
+            JsString::from(v.to_string()),
+            false,
+            context,
+        )
+        .ok();
     }
 
     obj
@@ -91,7 +96,7 @@ fn build_incoming_from_request(request: Request, context: &mut JsContext) -> JsO
 
 impl LocalContext {
     pub fn from_request(request: Request, dsl_path: &str) -> Self {
-        // TODO implement path parsing? 
+        // TODO implement path parsing?
         let mut context = JsContext::default();
 
         let obj = build_incoming_from_request(request, &mut context);
@@ -196,7 +201,6 @@ impl Context {
         let (tx_b, rx_b) = mpsc::channel::<Reply>();
         let dsl_path_thread_local = dsl_path.to_string();
         let thread = thread::spawn(move || {
-
             let ctx = LocalContext::from_request(request, &dsl_path_thread_local);
 
             for command in rx.iter() {
@@ -305,12 +309,7 @@ mod test {
         let headers = HashMap::from([("test".to_string(), "1234".to_string())]);
         let query = HashMap::from([("a".to_string(), "b".to_string())]);
         let context = Context::from_request(
-            Request::new(
-                headers,
-                json!({"a" : ["c"]}),
-                query,
-            )
-            .unwrap(),
+            Request::new(headers, json!({"a" : ["c"]}), query).unwrap(),
             "./unittest_dsl",
         );
 

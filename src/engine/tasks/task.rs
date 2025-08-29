@@ -260,10 +260,7 @@ mod test {
 
     #[test]
     fn render_obj_test() {
-        let context = Context::from_request(
-            Request::default(),
-            "./unittest_dsl",
-        );
+        let context = Context::from_request(Request::default(), "./unittest_dsl");
 
         let yml: YmlValue = serde_yaml_ng::from_str(
             r#"

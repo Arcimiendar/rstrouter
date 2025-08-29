@@ -86,7 +86,7 @@ impl Task for Template {
             .unwrap_or(YmlValue::Null);
         let dsl_val = context.evaluate_expr("${dsl}");
         // will never be the value from the unwrap_or "./unittest_dsl here, because the value is always there
-        let dsl_path = dsl_val.as_str().unwrap_or("./unittest_dsl"); 
+        let dsl_path = dsl_val.as_str().unwrap_or("./unittest_dsl");
 
         let internal_engine = Engine::from_template(&template, dsl_path);
 
@@ -139,7 +139,7 @@ mod test {
             tasks::{task::TaskFactory, template::TemplateFactory},
         },
     };
-    use serde_json::{json};
+    use serde_json::json;
 
     #[test]
     fn test_task_is_not_parsed() {
@@ -182,10 +182,7 @@ mod test {
         assert!(obj.is_some());
         let task = obj.unwrap();
 
-        let context = Context::from_request(
-            Request::default(),
-            "./unittest_dsl",
-        );
+        let context = Context::from_request(Request::default(), "./unittest_dsl");
 
         let res = task.execute(context).await;
         let context = res.0;

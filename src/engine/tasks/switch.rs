@@ -132,10 +132,7 @@ mod test {
             )
             .unwrap();
 
-        let context = Context::from_request(
-            Request::default(),
-            "./unittest_dsl",
-        );
+        let context = Context::from_request(Request::default(), "./unittest_dsl");
 
         context.evaluate_expr(&Context::wrap_js_code("var some = 1;"));
         let res = task.execute(context).await;

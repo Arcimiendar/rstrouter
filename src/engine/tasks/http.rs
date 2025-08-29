@@ -217,7 +217,7 @@ mod test {
         },
     };
     use httpmock::{Method, prelude::*};
-    use serde_json::{json};
+    use serde_json::json;
 
     #[test]
     fn factory_returns_none() {
@@ -285,10 +285,7 @@ mod test {
             assert!(obj.is_some());
             let task = obj.unwrap();
 
-            let context = Context::from_request(
-                Request::default(),
-                "./unittest_dsl",
-            );
+            let context = Context::from_request(Request::default(), "./unittest_dsl");
 
             let res = task.execute(context).await;
             mock.assert();
@@ -334,10 +331,7 @@ mod test {
         assert!(obj.is_some());
         let task = obj.unwrap();
 
-        let context = Context::from_request(
-            Request::default(),
-            "./unittest_dsl",
-        );
+        let context = Context::from_request(Request::default(), "./unittest_dsl");
 
         let res = task.execute(context).await;
         mock.assert();
