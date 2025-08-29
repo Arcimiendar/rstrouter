@@ -237,7 +237,7 @@ impl Endpoint {
                     if body.is_null() && !bd.is_null() {
                         body = bd.clone();
                     } else {
-                        body = Self::merge_two_body(&body, bd);
+                        body = Self::merge_two_types(&body, bd);
                     }
                 }
             }
@@ -296,7 +296,7 @@ impl Endpoint {
                     && let Some(name_r) = name_r_opt
                     && name_l == name_r
                 {
-                    val_l_to_merge = Self::merge_two_body(&val_l_to_merge, val_r);
+                    val_l_to_merge = Self::merge_two_types(&val_l_to_merge, val_r);
                     used_indices.push(ii);
                 }
             }
@@ -307,7 +307,7 @@ impl Endpoint {
         new_vec.clone() // to remove more than needed mem
     }
 
-    fn merge_two_body(b_left: &YmlValue, b_right: &YmlValue) -> YmlValue {
+    fn merge_two_types(b_left: &YmlValue, b_right: &YmlValue) -> YmlValue {
         // todo write tests for this
 
         if b_left.is_null() {
@@ -351,7 +351,7 @@ impl Endpoint {
         let mut merged_fields = seq.clone();
 
         if let Some(fields) = obj_copy.get("fields") {
-            merged_fields = Self::merge_two_body(&merged_fields, fields);
+            merged_fields = Self::merge_two_types(&merged_fields, fields);
         }
 
         if let Some(m) = obj_copy.as_mapping_mut() {
@@ -423,7 +423,7 @@ impl Endpoint {
                 v.is_mapping()
             }) // only mapping is allowed for items
             .map(|v| (*v).clone())
-            .reduce(|a, b| Self::merge_two_body(&a, &b));
+            .reduce(|a, b| Self::merge_two_types(&a, &b));
 
         if let Some(merged_items) = merged_items_opt {
             // if atleast one items is there
@@ -448,7 +448,7 @@ impl Endpoint {
                 v.is_sequence()
             }) // fields sequence is only allowed fields type
             .map(|v| (*v).clone())
-            .reduce(|a, b| Self::merge_two_body(&a, &b));
+            .reduce(|a, b| Self::merge_two_types(&a, &b));
         if let Some(merged_fields) = merged_fields_opt {
             // if at least one fields is presented and is sequence
             if let Some(m) = into.as_mapping_mut() {
@@ -491,7 +491,7 @@ impl Endpoint {
         let l_enum = b_left.get("enum").and_then(|es| es.as_sequence());
         let r_enum = b_right.get("enum").and_then(|es| es.as_sequence());
 
-        let enums = l_enum
+        let enums: Vec<_> = l_enum
             .iter()
             .chain(r_enum.iter())
             .flat_map(|v| v.iter())
@@ -499,7 +499,7 @@ impl Endpoint {
             .unique()
             .collect();
 
-        if let Some(m) = into.as_mapping_mut() {
+        if let Some(m) = into.as_mapping_mut() && enums.len() > 0 {
             // always true
             m.insert(YmlValue::String("enum".into()), YmlValue::Sequence(enums));
         }
@@ -548,5 +548,95 @@ impl std::fmt::Display for EndpointsCollection {
 impl std::fmt::Display for Endpoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{{ method: {:?}, url: {} }}", self.method, self.url_path)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use serde_yaml_ng::{Value as YmlValue, Mapping as YmlMapping};
+
+    use crate::endpoints::parser::Endpoint;
+    #[test]
+    fn test_merge_mappings_enum() {
+        let left_val: YmlValue = serde_yaml_ng::from_str(
+            r#"
+                enum: ["1", "2", "3"]
+            "#,
+        )
+        .unwrap();
+
+        let right_val: YmlValue = serde_yaml_ng::from_str(
+            r#"
+                enum: ["3", "4", "5", "6", "7"]
+            "#
+        )
+        .unwrap();
+
+        let mut into = YmlValue::Mapping(YmlMapping::new());
+
+        Endpoint::merge_mappings_enum(&left_val, &right_val, &mut into);
+
+        assert_eq!(into.get("enum").unwrap().as_sequence().unwrap().len(), 7);
+
+        let mut into = YmlValue::Mapping(YmlMapping::new());
+        let null = YmlValue::Null;
+        
+        Endpoint::merge_mappings_enum(&null, &right_val, &mut into);
+        
+        assert_eq!(into.get("enum").unwrap().as_sequence().unwrap().len(), 5);
+
+        let mut into = YmlValue::Mapping(YmlMapping::new());
+
+        Endpoint::merge_mappings_enum(&left_val, &null, &mut into);
+
+        assert_eq!(into.get("enum").unwrap().as_sequence().unwrap().len(), 3);
+
+        let mut into = YmlValue::Mapping(YmlMapping::new());
+        
+        Endpoint::merge_mappings_enum(&null, &null, &mut into);
+
+        assert!(into.get("enum").is_none());
+    }
+
+    #[test]
+    fn test_merge_mappings_descriptions() {
+        let left_val: YmlValue = serde_yaml_ng::from_str(
+            r#"
+                description: some
+            "#,
+        )
+        .unwrap();
+
+        let right_val: YmlValue = serde_yaml_ng::from_str(
+            r#"
+                description: another
+            "#
+        )
+        .unwrap();
+
+        let mut into = YmlValue::Mapping(YmlMapping::new());
+
+        Endpoint::merge_mappings_descriptions(&left_val, &right_val, &mut into);
+
+        assert_eq!(into.get("description").unwrap(), "some; another");
+
+        let mut into = YmlValue::Mapping(YmlMapping::new());
+        let null = YmlValue::Null;
+        
+        Endpoint::merge_mappings_descriptions(&null, &right_val, &mut into);
+        
+        assert_eq!(into.get("description").unwrap(), "another");
+
+        let mut into = YmlValue::Mapping(YmlMapping::new());
+
+        Endpoint::merge_mappings_descriptions(&left_val, &null, &mut into);
+
+        assert_eq!(into.get("description").unwrap(), "some");
+
+        let mut into = YmlValue::Mapping(YmlMapping::new());
+        
+        Endpoint::merge_mappings_descriptions(&null, &null, &mut into);
+
+        assert!(into.get("description").is_none());
     }
 }
