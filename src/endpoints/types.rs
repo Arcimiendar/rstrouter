@@ -1,21 +1,22 @@
-use std::{collections::HashMap, error::Error, str::FromStr};
+use std::{collections::HashMap, error::Error};
 
-use axum::{
-    extract::{FromRequest, Json, Request as AxumRequest},
-    http::{HeaderMap, HeaderName, HeaderValue},
-};
+use axum::extract::{FromRequest, Json, Request as AxumRequest};
+use serde::Serialize;
 use serde_json::Value as JsonValue;
 
-#[derive(Default)]
+#[derive(Default, Serialize)]
 pub struct Request {
-    r_query: HashMap<String, String>,
-    r_header: HeaderMap,
-    r_body: JsonValue,
+    params: HashMap<String, String>,
+    headers: HashMap<String, String>,
+    body: JsonValue,
 }
 
 impl Request {
     pub async fn from_request(r: AxumRequest) -> Self {
-        let headers = r.headers().clone();
+        let headers = r.headers()
+            .iter()
+            .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("default").to_string()))
+            .collect();
 
         let query_params_str = r.uri().query().unwrap_or("");
         let query_params: HashMap<String, String> =
@@ -27,9 +28,9 @@ impl Request {
             .unwrap_or(JsonValue::Null);
 
         Self {
-            r_query: query_params,
-            r_header: headers,
-            r_body: js_val,
+            params: query_params,
+            headers: headers,
+            body: js_val,
         }
     }
 
@@ -39,30 +40,10 @@ impl Request {
         query: HashMap<String, String>,
     ) -> Result<Self, Box<dyn Error>> {
         Ok(Self {
-            r_query: query,
-            r_header: headers
-                .iter()
-                .flat_map(|(k, v)| {
-                    Some((
-                        HeaderName::from_str(k).ok()?,
-                        HeaderValue::from_str(v).ok()?,
-                    ))
-                })
-                .collect(),
-            r_body: body,
+            params: query,
+            headers: headers,
+            body: body,
         })
-    }
-
-    pub fn headers(&self) -> &HeaderMap {
-        &self.r_header
-    }
-
-    pub fn query(&self) -> &HashMap<String, String> {
-        &self.r_query
-    }
-
-    pub fn body(&self) -> &JsonValue {
-        &self.r_body
     }
 }
 
@@ -82,14 +63,14 @@ mod test {
         )
         .unwrap();
 
-        let headers = request.headers();
+        let headers = request.headers;
         assert_eq!(headers.get("test").unwrap(), "1234");
 
-        let query = request.query();
+        let query = request.params;
         assert_eq!(query.get("a").unwrap(), "b");
         assert_eq!(query.get("c").unwrap(), "d");
 
-        let body = request.body().clone();
+        let body = request.body;
         assert_eq!(body, json!({"obj": 1234}));
     }
 
@@ -104,13 +85,13 @@ mod test {
 
         let request = Request::from_request(req).await;
 
-        let body = request.body().clone();
+        let body = request.body;
         assert_eq!(body, json!({"test": "test"}));
 
-        let headers = request.headers();
+        let headers = request.headers;
         assert_eq!(headers.get("some_h").unwrap(), "hh");
 
-        let query = request.query();
+        let query = request.params;
         assert_eq!(query.get("aa").unwrap(), "bb");
         assert_eq!(query.get("cc").unwrap(), "dd");
     }
@@ -118,8 +99,8 @@ mod test {
     #[test]
     fn test_default() {
         let req = Request::default();
-        assert!(req.query().is_empty());
-        assert!(req.headers().is_empty());
-        assert!(req.body().is_null());
+        assert!(req.params.is_empty());
+        assert!(req.headers.is_empty());
+        assert!(req.body.is_null());
     }
 }

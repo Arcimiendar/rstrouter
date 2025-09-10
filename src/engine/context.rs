@@ -1,4 +1,4 @@
-use boa_engine::{Context as JsContext, JsObject, JsString, JsValue, Source, property};
+use rquickjs::{Context as JsContext, IntoJs, Result as JsResult, Runtime as JsRuntime, Value as JsValue, Ctx as JsCtx};
 use log::{debug, warn};
 use serde_json::{Value as JsonValue, json};
 use std::cell::RefCell;
@@ -23,99 +23,55 @@ pub struct ReturnValue {
 // checked that drop is correct on the end of request.
 // moved JS executor to a separate thread an leaft it hanging there
 
-#[derive(Debug)]
+impl<'js> IntoJs<'js> for Request {
+    fn into_js(self, ctx: &JsCtx<'js>) -> JsResult<JsValue<'js>> {
+        // TODO implement path parsing?
+        rquickjs_serde::to_value(ctx.clone(), self)
+            .map_err(|e| {
+                rquickjs::Error::IntoJs {
+                    from: "Request",
+                    to: "Value",
+                    message: Some(format!("cannot init incoming object from request: {}", e))
+                }
+            })
+    }
+}
+
 pub struct LocalContext {
-    pub context: RefCell<JsContext>,
+    pub context: Option<JsContext>,
     pub status_code: RefCell<u16>,
     pub return_json: RefCell<JsonValue>,
 }
 
-fn build_headers(request: &Request, context: &mut JsContext) -> JsObject {
-    let obj = JsObject::with_null_proto();
-    for (k, v) in request.headers() {
-        obj.set(
-            JsString::from(k.as_str()),
-            JsString::from(v.to_str().unwrap_or("default")),
-            false,
-            context,
-        )
-        .ok();
-    }
-    obj
-}
-
-fn build_params(request: &Request, context: &mut JsContext) -> JsObject {
-    let obj = JsObject::with_null_proto();
-    let query_params = request.query();
-    for (k, v) in query_params {
-        obj.set(
-            JsString::from(k.to_string()),
-            JsString::from(v.to_string()),
-            false,
-            context,
-        )
-        .ok();
-    }
-
-    obj
-}
-
-fn build_body(request: &Request, context: &mut JsContext) -> JsValue {
-    let body = request.body();
-    JsValue::from_json(body, context).unwrap_or(JsValue::Null)
-}
-
-fn build_incoming_from_request(request: Request, context: &mut JsContext) -> JsObject {
-    let obj = JsObject::with_null_proto();
-    obj.set(
-        JsString::from("headers"),
-        JsValue::from(build_headers(&request, context)),
-        false,
-        context,
-    )
-    .ok();
-
-    obj.set(
-        JsString::from("params"),
-        JsValue::from(build_params(&request, context)),
-        false,
-        context,
-    )
-    .ok();
-
-    obj.set(
-        JsString::from("body"),
-        JsValue::from(build_body(&request, context)),
-        false,
-        context,
-    )
-    .ok();
-
-    obj
-}
-
 impl LocalContext {
     pub fn from_request(request: Request, dsl_path: &str) -> Self {
-        // TODO implement path parsing?
-        let mut context = JsContext::default();
-
-        let obj = build_incoming_from_request(request, &mut context);
-
-        context
-            .register_global_property(JsString::from("incoming"), obj, property::Attribute::all())
-            .ok();
-
+        let context = Self::get_context(request).ok();
         let ctx = Self {
             status_code: RefCell::new(200),
             return_json: RefCell::new(JsonValue::Null),
-            context: RefCell::new(context),
+            context: context,
         };
 
         ctx.evaluate_expr(&Context::wrap_js_code(&format!(
             "var dsl = {}",
             JsonValue::String(dsl_path.to_string())
         )));
+
         ctx
+    }
+
+    fn get_context(request: Request) -> JsResult<JsContext> {
+        let rt = JsRuntime::new()?;
+        let context = JsContext::full(&rt)?;
+
+        context.with(|ctx| -> JsResult<()> {
+            let incoming = request.into_js(&ctx)?;
+            ctx.globals().set("incoming", incoming)?;
+
+            Ok(())
+        })?;
+
+        Ok(context)
     }
 
     pub fn get_return_value(&self) -> ReturnValue {
@@ -126,28 +82,27 @@ impl LocalContext {
     }
 
     fn execute_js_signle_line(&self, expr: &str) -> JsonValue {
-        let mut context = self.context.borrow_mut();
-        let s = format!("JSON.stringify({})", expr);
-        let sc = s.as_bytes(); // borrow check is crazy here
-
         let source = if expr.ends_with('!') {
-            Source::from_bytes(expr[0..expr.len() - 1].as_bytes())
+            &expr[0..expr.len() - 1]
         } else {
-            Source::from_bytes(sc)
+            &expr
         };
-        context
-            .eval(source)
-            .map_err(|f| {
-                warn!("Uncaught JS error: {}", f);
-                f
-            })
-            .ok()
-            .and_then(|f| {
-                f.as_string()
-                    .and_then(|s| s.to_std_string().ok())
-                    .and_then(|v| serde_json::from_str(&v).ok())
-            })
-            .unwrap_or(JsonValue::Null)
+
+        if let Some(context) = &self.context {
+            return context.with(|ctx| -> JsonValue {
+                ctx.eval(source)
+                    .ok()
+                    .and_then(|v: JsValue| {
+                        warn!("{:?}", v);
+                        rquickjs_serde::from_value(v).ok()
+                    })
+                    .unwrap_or(JsonValue::Null)
+
+            });
+        } else {
+            warn!("Failed to create runtime for js. returning Null");
+            return JsonValue::Null;
+        }
     }
 
     pub fn evaluate_expr(&self, expr: &str) -> JsonValue {
