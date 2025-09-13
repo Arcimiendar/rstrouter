@@ -202,8 +202,7 @@ mod test {
                     HashMap::new(),
                     JsonValue::Null,
                     HashMap::from([("error".to_string(), "error".to_string())]),
-                )
-                .unwrap(),
+                ),
             )
             .await;
 

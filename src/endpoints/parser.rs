@@ -499,7 +499,9 @@ impl Endpoint {
             .unique()
             .collect();
 
-        if let Some(m) = into.as_mapping_mut() && enums.len() > 0 {
+        if let Some(m) = into.as_mapping_mut()
+            && enums.len() > 0
+        {
             // always true
             m.insert(YmlValue::String("enum".into()), YmlValue::Sequence(enums));
         }
@@ -553,7 +555,7 @@ impl std::fmt::Display for Endpoint {
 
 #[cfg(test)]
 mod test {
-    use serde_yaml_ng::{Value as YmlValue, Mapping as YmlMapping};
+    use serde_yaml_ng::{Mapping as YmlMapping, Value as YmlValue};
 
     use crate::endpoints::parser::Endpoint;
     #[test]
@@ -568,7 +570,7 @@ mod test {
         let right_val: YmlValue = serde_yaml_ng::from_str(
             r#"
                 enum: ["3", "4", "5", "6", "7"]
-            "#
+            "#,
         )
         .unwrap();
 
@@ -580,9 +582,9 @@ mod test {
 
         let mut into = YmlValue::Mapping(YmlMapping::new());
         let null = YmlValue::Null;
-        
+
         Endpoint::merge_mappings_enum(&null, &right_val, &mut into);
-        
+
         assert_eq!(into.get("enum").unwrap().as_sequence().unwrap().len(), 5);
 
         let mut into = YmlValue::Mapping(YmlMapping::new());
@@ -592,7 +594,7 @@ mod test {
         assert_eq!(into.get("enum").unwrap().as_sequence().unwrap().len(), 3);
 
         let mut into = YmlValue::Mapping(YmlMapping::new());
-        
+
         Endpoint::merge_mappings_enum(&null, &null, &mut into);
 
         assert!(into.get("enum").is_none());
@@ -610,7 +612,7 @@ mod test {
         let right_val: YmlValue = serde_yaml_ng::from_str(
             r#"
                 description: another
-            "#
+            "#,
         )
         .unwrap();
 
@@ -622,9 +624,9 @@ mod test {
 
         let mut into = YmlValue::Mapping(YmlMapping::new());
         let null = YmlValue::Null;
-        
+
         Endpoint::merge_mappings_descriptions(&null, &right_val, &mut into);
-        
+
         assert_eq!(into.get("description").unwrap(), "another");
 
         let mut into = YmlValue::Mapping(YmlMapping::new());
@@ -634,7 +636,7 @@ mod test {
         assert_eq!(into.get("description").unwrap(), "some");
 
         let mut into = YmlValue::Mapping(YmlMapping::new());
-        
+
         Endpoint::merge_mappings_descriptions(&null, &null, &mut into);
 
         assert!(into.get("description").is_none());

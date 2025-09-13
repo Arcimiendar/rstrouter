@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error};
+use std::collections::HashMap;
 
 use axum::extract::{FromRequest, Json, Request as AxumRequest};
 use serde::Serialize;
@@ -13,14 +13,19 @@ pub struct Request {
 
 impl Request {
     pub async fn from_request(r: AxumRequest) -> Self {
-        let headers = r.headers()
+        let headers = r
+            .headers()
             .iter()
-            .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("default").to_string()))
+            .map(|(k, v)| {
+                (
+                    k.as_str().to_string(),
+                    v.to_str().unwrap_or("default").to_string(),
+                )
+            })
             .collect();
 
         let query_params_str = r.uri().query().unwrap_or("");
-        let query_params: HashMap<String, String> =
-            serde_urlencoded::from_str(query_params_str).unwrap_or_default();
+        let query_params = serde_urlencoded::from_str(query_params_str).unwrap_or_default();
 
         let js_val = Json::from_request(r, &())
             .await
@@ -38,12 +43,12 @@ impl Request {
         headers: HashMap<String, String>,
         body: JsonValue,
         query: HashMap<String, String>,
-    ) -> Result<Self, Box<dyn Error>> {
-        Ok(Self {
+    ) -> Self {
+        Self {
             params: query,
             headers: headers,
             body: body,
-        })
+        }
     }
 }
 
@@ -60,8 +65,7 @@ mod test {
             HashMap::from([("test".to_string(), "1234".to_string())]),
             json!({"obj": 1234}),
             HashMap::from([("a".into(), "b".into()), ("c".into(), "d".into())]),
-        )
-        .unwrap();
+        );
 
         let headers = request.headers;
         assert_eq!(headers.get("test").unwrap(), "1234");

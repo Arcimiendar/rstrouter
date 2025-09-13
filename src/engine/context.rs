@@ -1,5 +1,8 @@
-use rquickjs::{Context as JsContext, IntoJs, Result as JsResult, Runtime as JsRuntime, Value as JsValue, Ctx as JsCtx};
 use log::{debug, warn};
+use rquickjs::{
+    Context as JsContext, Ctx as JsCtx, IntoJs, Result as JsResult, Runtime as JsRuntime,
+    Value as JsValue,
+};
 use serde_json::{Value as JsonValue, json};
 use std::cell::RefCell;
 use std::sync::{Mutex, mpsc};
@@ -26,14 +29,11 @@ pub struct ReturnValue {
 impl<'js> IntoJs<'js> for Request {
     fn into_js(self, ctx: &JsCtx<'js>) -> JsResult<JsValue<'js>> {
         // TODO implement path parsing?
-        rquickjs_serde::to_value(ctx.clone(), self)
-            .map_err(|e| {
-                rquickjs::Error::IntoJs {
-                    from: "Request",
-                    to: "Value",
-                    message: Some(format!("cannot init incoming object from request: {}", e))
-                }
-            })
+        rquickjs_serde::to_value(ctx.clone(), self).map_err(|e| rquickjs::Error::IntoJs {
+            from: "Request",
+            to: "Value",
+            message: Some(format!("cannot init incoming object from request: {}", e)),
+        })
     }
 }
 
@@ -97,7 +97,6 @@ impl LocalContext {
                         rquickjs_serde::from_value(v).ok()
                     })
                     .unwrap_or(JsonValue::Null)
-
             });
         } else {
             warn!("Failed to create runtime for js. returning Null");
@@ -264,7 +263,7 @@ mod test {
         let headers = HashMap::from([("test".to_string(), "1234".to_string())]);
         let query = HashMap::from([("a".to_string(), "b".to_string())]);
         let context = Context::from_request(
-            Request::new(headers, json!({"a" : ["c"]}), query).unwrap(),
+            Request::new(headers, json!({"a" : ["c"]}), query),
             "./unittest_dsl",
         );
 

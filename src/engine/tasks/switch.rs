@@ -26,7 +26,6 @@ impl TaskFactory for SwitchFactory {
             .get("switch")?
             .as_sequence()?
             .iter()
-            .flat_map(|f| f.as_mapping())
             .flat_map(|m| {
                 let mut condition = m.get("condition")?.as_str()?.to_string();
                 if condition.starts_with("${") && condition.ends_with("}") {

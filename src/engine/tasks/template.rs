@@ -90,15 +90,14 @@ impl Task for Template {
 
         let internal_engine = Engine::from_template(&template, dsl_path);
 
-        if let Some(request) = self.create_request(&context) {
-            let result = internal_engine.execute(request).await;
-            if let Some(r) = &self.result {
-                context.evaluate_expr(&Context::wrap_js_code(&format!(
-                    "let {} = {};",
-                    r,
-                    result.0.to_string()
-                )));
-            }
+        let request = self.create_request(&context);
+        let result = internal_engine.execute(request).await;
+        if let Some(r) = &self.result {
+            context.evaluate_expr(&Context::wrap_js_code(&format!(
+                "let {} = {};",
+                r,
+                result.0.to_string()
+            )));
         }
 
         ExecutionResult(context, self.next_task.clone())
@@ -110,7 +109,7 @@ impl Task for Template {
 }
 
 impl Template {
-    fn create_request(&self, context: &Context) -> Option<Request> {
+    fn create_request(&self, context: &Context) -> Request {
         let body = render_obj(&self.body, context);
         let headers = self
             .headers
@@ -126,7 +125,7 @@ impl Template {
             .flat_map(|(k, v)| Some((k, v.as_str()?.to_string())))
             .collect();
 
-        Request::new(headers, body, query).ok()
+        Request::new(headers, body, query)
     }
 }
 
