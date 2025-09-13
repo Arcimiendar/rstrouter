@@ -2,8 +2,7 @@ use itertools::Itertools;
 use log::warn;
 use rstmytype::{ApiEndpoint, ApiEndpointMethod, ApiProject};
 use serde_yaml_ng::{Mapping as YmlMapping, Value as YmlValue};
-use std::ffi::OsStr;
-use std::fs::{DirEntry, read_dir, read_to_string};
+use std::fs::{read_dir, read_to_string};
 use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
@@ -54,130 +53,170 @@ impl ApiProject for EndpointsCollection {
     }
 }
 
-impl EndpointsCollection {
-    pub fn parse_from_dir(dsl_dir: &str) -> Self {
-        Self {
-            endpoints: Endpoint::parse_from_dir(dsl_dir),
+
+struct SoftList<'a, T> {
+    el: T,
+    next: Option<&'a Self>,
+}
+
+impl<'a, T> SoftList<'a, T> {
+    pub fn iter(&'a self) -> SoftListIter<'a, T> {
+        SoftListIter {
+            current: Some(self),
         }
     }
 }
 
-impl Endpoint {
-    fn parse_from_dir(dsl_dir: &str) -> Vec<Self> {
-        let top_level_guard: Vec<Guard> = Guard::parse_guard_from_dir(&PathBuf::from(dsl_dir))
-            .into_iter()
-            .collect();
 
-        read_dir(dsl_dir)
-            .ok()
-            .iter_mut()
-            .flat_map(|r| r.into_iter())
-            .flat_map(|e| e.ok())
-            .flat_map(|e| Self::parse_from_project_dir(&e, &top_level_guard))
-            .collect()
+struct SoftListIter<'a, T> {
+    current: Option<&'a SoftList<'a, T>>,
+}
+
+impl<'a, T> Iterator for SoftListIter<'a, T> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let current = self.current?;
+        if let Some(next) = current.next {
+            self.current = Some(next);
+        } else {
+            self.current = None;
+        }
+
+        return Some(&current.el);
+    }
+}
+
+impl EndpointsCollection {
+    pub fn parse_from_dir(dsl_dir: &str) -> Self {
+        let current_dir = PathBuf::from(dsl_dir);
+        let current_url = "";
+        let mut endpoints_acc = Vec::new();
+        Self::parse_from_dir_rec(current_url, &current_dir, None, &mut endpoints_acc);
+        Self {
+            endpoints: endpoints_acc,
+        }
     }
 
-    fn parse_from_project_dir<'a>(dir: &DirEntry, guards: &Vec<Guard>) -> Vec<Self> {
-        let guards: Vec<Guard> = guards
-            .iter()
-            .map(|g| g.clone())
-            .chain(Guard::parse_guard_from_dir(&dir.path()).into_iter())
-            .collect();
+    fn parse_from_dir_rec(current_url: &str, current_dir: &PathBuf, in_guard_list: Option<&SoftList<Guard>>, endpoints_acc: &mut Vec<Endpoint>) {
+        let guard_list: Option<&SoftList<Guard>>;
+        let local_soft_list: SoftList<Guard>;
 
-        let tag = dir.file_name();
+        if let Some(guard) = Guard::parse_guard_from_dir(current_dir) {
+            local_soft_list = SoftList {
+                el: guard,
+                next: in_guard_list,
+            };
+            guard_list = Some(&local_soft_list);
+        } else {
+            guard_list = in_guard_list;
+        }
 
-        let iter: Vec<Self> = read_dir(dir.path())
+        read_dir(current_dir)
             .ok()
             .iter_mut()
             .flat_map(|r| r.into_iter())
             .flat_map(|e| e.ok())
-            .filter(|e| e.path().is_dir())
-            .filter(|e| !e.path().ends_with("TEMPLATES"))
-            .map(|e| {
-                let method = if e.path().ends_with("GET") {
-                    ApiEndpointMethod::Get
-                } else if e.path().ends_with("POST") {
-                    ApiEndpointMethod::Post
-                } else {
-                    warn!(
-                        "found unsupported method {} for project {}",
-                        e.path().display(),
-                        dir.path().display()
-                    );
-                    return None;
-                };
-                let url_path = format!("/{}", tag.to_str()?);
-                Some(Self::parse_with_method(&e, &tag, url_path, method, &guards))
-            })
-            .flat_map(|e| e)
-            .flat_map(|e| e)
-            .collect();
-        iter
-    }
-
-    fn parse_with_method(
-        dir: &DirEntry,
-        tag: &OsStr,
-        url_path: String,
-        method: ApiEndpointMethod,
-        guards: &Vec<Guard>,
-    ) -> Vec<Endpoint> {
-        let guards: Vec<Guard> = guards
-            .iter()
-            .map(|g| g.clone())
-            .chain(Guard::parse_guard_from_dir(&dir.path()).into_iter())
-            .collect();
-
-        read_dir(dir.path())
-            .ok()
-            .iter_mut()
-            .flat_map(|r| r.into_iter())
-            .flat_map(|e| e.ok())
-            .flat_map(|e| {
-                if e.path().is_file()
-                    && !e.file_name().to_str()?.starts_with(".guard")
-                    && (e.path().extension()? == "yaml" || e.path().extension()? == "yml")
-                {
-                    return Some(vec![Self::parse_from_file(
-                        &e,
-                        &tag,
-                        &guards,
-                        method.clone(),
-                        format!("{}/{}", url_path, e.path().file_stem()?.to_str()?),
-                    )?]);
+            .for_each(|f| {
+                let f_path = f.path();
+                if !f_path.is_dir() {
+                    return;
+                }
+                              
+                if f.file_name() == "POST" {
+                    Endpoint::parse_from_dir_rec(&ApiEndpointMethod::Post, current_url, current_url, &f_path, guard_list, endpoints_acc);
+                    return;
                 }
 
-                Some(Self::parse_with_method(
-                    &e,
-                    tag,
-                    format!("{}/{}", url_path, e.file_name().to_str()?),
-                    method.clone(),
-                    &guards,
-                ))
-            })
-            .flat_map(|v| v)
-            .collect()
+                if f.file_name() == "GET" {
+                    Endpoint::parse_from_dir_rec(&ApiEndpointMethod::Get, current_url, current_url, &f_path, guard_list, endpoints_acc);
+                    return;
+                }
+
+                let Some(new_current_url) = f.file_name()
+                    .to_str()
+                    .map(|fname| format!("{}/{}", current_url, fname)) else {
+                    return;
+                };
+
+                Self::parse_from_dir_rec(&new_current_url, &f_path, guard_list, endpoints_acc);
+            });
+    }
+}
+
+impl Endpoint {
+    fn parse_from_dir_rec(method: &ApiEndpointMethod, current_url: &str, tag: &str, current_dir: &PathBuf, in_guard_list: Option<&SoftList<Guard>>, endpoints_acc: &mut Vec<Endpoint>) {
+        let guard_list: Option<&SoftList<Guard>>;
+        let local_soft_list: SoftList<Guard>;
+
+        if let Some(guard) = Guard::parse_guard_from_dir(current_dir) {
+            local_soft_list = SoftList {
+                el: guard,
+                next: in_guard_list,
+            };
+            guard_list = Some(&local_soft_list);
+        } else {
+            guard_list = in_guard_list;
+        }
+
+        read_dir(current_dir)
+            .ok()
+            .iter_mut()
+            .flat_map(|r| r.into_iter())
+            .flat_map(|e| e.ok())
+            .for_each(|f| {
+                let f_path = f.path();
+
+                if !f_path.is_dir() {
+                    if !f_path.is_file() {
+                        warn!("{} in {} is not a file nor dir", f_path.display(), current_dir.display());
+                        return;
+                    }
+                    
+                    if let Some(f_name) = f_path.file_name().and_then(|f| f.to_str()) {
+                        if f_name.starts_with(".guard") {
+                            return;
+                        }
+                    }
+                    
+                    if let Some(endpoint) = Self::parse_from_file(&f_path, tag, guard_list, method, current_url) {
+                        endpoints_acc.push(endpoint);
+                    }
+
+                    return;
+                }
+
+                let Some(new_current_url) = f.file_name()
+                    .to_str()
+                    .map(|fname| format!("{}/{}", current_url, fname)) else {
+                    return;
+                };
+
+                Self::parse_from_dir_rec(method, &new_current_url, tag, &f_path, guard_list, endpoints_acc);
+            });
     }
 
     fn parse_from_file(
-        file: &DirEntry,
-        tag: &OsStr,
-        guards: &Vec<Guard>,
-        method: ApiEndpointMethod,
-        url_path: String,
+        file: &PathBuf,
+        tag: &str,
+        guard_list: Option<&SoftList<Guard>>,
+        method: &ApiEndpointMethod,
+        url_path: &str,
     ) -> Option<Self> {
-        let content = read_to_string(file.path()).ok()?;
+        let content = read_to_string(file).ok()?;
         let Some(yml_content) = serde_yaml_ng::from_str(&content).ok() else {
-            warn!("Endpoint {} has bad yml content", file.path().display());
+            warn!("Endpoint {} has bad yml content", file.display());
             return None;
         };
 
+        let f_name = file.file_stem()?.to_str()?;
+
         let mut obj = Self {
-            guards: guards.clone(),
-            tag: tag.to_str()?.to_string(),
-            method,
+            guards: guard_list.iter().flat_map(|l| l.iter()).map(|g| g.clone()).collect(),
+            tag: tag.to_string(),
+            method: method.clone(),
             yml_content: yml_content,
-            url_path,
+            url_path: format!("{}/{}", url_path, f_name),
             merged_declaration: "".into(),
         };
 
