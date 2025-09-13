@@ -93,7 +93,6 @@ impl LocalContext {
                 ctx.eval(source)
                     .ok()
                     .and_then(|v: JsValue| {
-                        warn!("{:?}", v);
                         rquickjs_serde::from_value(v).ok()
                     })
                     .unwrap_or(JsonValue::Null)
@@ -248,6 +247,7 @@ impl Drop for Context {
         self.tx.send(Command::Exit).ok();
         if let Some(thread) = self.thread.take() {
             thread.join().ok();
+            debug!("thread is joined");
         }
     }
 }

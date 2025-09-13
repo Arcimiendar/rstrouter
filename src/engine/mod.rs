@@ -197,13 +197,11 @@ mod test {
         assert_eq!(res.1, 200);
 
         let res = engine
-            .execute(
-                Request::new(
-                    HashMap::new(),
-                    JsonValue::Null,
-                    HashMap::from([("error".to_string(), "error".to_string())]),
-                ),
-            )
+            .execute(Request::new(
+                HashMap::new(),
+                JsonValue::Null,
+                HashMap::from([("error".to_string(), "error".to_string())]),
+            ))
             .await;
 
         assert_eq!(res.0, json!({"response": "guard return"}));
