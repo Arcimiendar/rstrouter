@@ -53,7 +53,6 @@ impl ApiProject for EndpointsCollection {
     }
 }
 
-
 struct SoftList<'a, T> {
     el: T,
     next: Option<&'a Self>,
@@ -66,7 +65,6 @@ impl<'a, T> SoftList<'a, T> {
         }
     }
 }
-
 
 struct SoftListIter<'a, T> {
     current: Option<&'a SoftList<'a, T>>,
@@ -98,7 +96,12 @@ impl EndpointsCollection {
         }
     }
 
-    fn parse_from_dir_rec(current_url: &str, current_dir: &PathBuf, in_guard_list: Option<&SoftList<Guard>>, endpoints_acc: &mut Vec<Endpoint>) {
+    fn parse_from_dir_rec(
+        current_url: &str,
+        current_dir: &PathBuf,
+        in_guard_list: Option<&SoftList<Guard>>,
+        endpoints_acc: &mut Vec<Endpoint>,
+    ) {
         let guard_list: Option<&SoftList<Guard>>;
         let local_soft_list: SoftList<Guard>;
 
@@ -122,20 +125,36 @@ impl EndpointsCollection {
                 if !f_path.is_dir() {
                     return;
                 }
-                              
+
                 if f.file_name() == "POST" {
-                    Endpoint::parse_from_dir_rec(&ApiEndpointMethod::Post, current_url, current_url, &f_path, guard_list, endpoints_acc);
+                    Endpoint::parse_from_dir_rec(
+                        &ApiEndpointMethod::Post,
+                        current_url,
+                        current_url,
+                        &f_path,
+                        guard_list,
+                        endpoints_acc,
+                    );
                     return;
                 }
 
                 if f.file_name() == "GET" {
-                    Endpoint::parse_from_dir_rec(&ApiEndpointMethod::Get, current_url, current_url, &f_path, guard_list, endpoints_acc);
+                    Endpoint::parse_from_dir_rec(
+                        &ApiEndpointMethod::Get,
+                        current_url,
+                        current_url,
+                        &f_path,
+                        guard_list,
+                        endpoints_acc,
+                    );
                     return;
                 }
 
-                let Some(new_current_url) = f.file_name()
+                let Some(new_current_url) = f
+                    .file_name()
                     .to_str()
-                    .map(|fname| format!("{}/{}", current_url, fname)) else {
+                    .map(|fname| format!("{}/{}", current_url, fname))
+                else {
                     return;
                 };
 
@@ -145,7 +164,14 @@ impl EndpointsCollection {
 }
 
 impl Endpoint {
-    fn parse_from_dir_rec(method: &ApiEndpointMethod, current_url: &str, tag: &str, current_dir: &PathBuf, in_guard_list: Option<&SoftList<Guard>>, endpoints_acc: &mut Vec<Endpoint>) {
+    fn parse_from_dir_rec(
+        method: &ApiEndpointMethod,
+        current_url: &str,
+        tag: &str,
+        current_dir: &PathBuf,
+        in_guard_list: Option<&SoftList<Guard>>,
+        endpoints_acc: &mut Vec<Endpoint>,
+    ) {
         let guard_list: Option<&SoftList<Guard>>;
         let local_soft_list: SoftList<Guard>;
 
@@ -169,30 +195,45 @@ impl Endpoint {
 
                 if !f_path.is_dir() {
                     if !f_path.is_file() {
-                        warn!("{} in {} is not a file nor dir", f_path.display(), current_dir.display());
+                        warn!(
+                            "{} in {} is not a file nor dir",
+                            f_path.display(),
+                            current_dir.display()
+                        );
                         return;
                     }
-                    
+
                     if let Some(f_name) = f_path.file_name().and_then(|f| f.to_str()) {
                         if f_name.starts_with(".guard") {
                             return;
                         }
                     }
-                    
-                    if let Some(endpoint) = Self::parse_from_file(&f_path, tag, guard_list, method, current_url) {
+
+                    if let Some(endpoint) =
+                        Self::parse_from_file(&f_path, tag, guard_list, method, current_url)
+                    {
                         endpoints_acc.push(endpoint);
                     }
 
                     return;
                 }
 
-                let Some(new_current_url) = f.file_name()
+                let Some(new_current_url) = f
+                    .file_name()
                     .to_str()
-                    .map(|fname| format!("{}/{}", current_url, fname)) else {
+                    .map(|fname| format!("{}/{}", current_url, fname))
+                else {
                     return;
                 };
 
-                Self::parse_from_dir_rec(method, &new_current_url, tag, &f_path, guard_list, endpoints_acc);
+                Self::parse_from_dir_rec(
+                    method,
+                    &new_current_url,
+                    tag,
+                    &f_path,
+                    guard_list,
+                    endpoints_acc,
+                );
             });
     }
 
@@ -212,7 +253,11 @@ impl Endpoint {
         let f_name = file.file_stem()?.to_str()?;
 
         let mut obj = Self {
-            guards: guard_list.iter().flat_map(|l| l.iter()).map(|g| g.clone()).collect(),
+            guards: guard_list
+                .iter()
+                .flat_map(|l| l.iter())
+                .map(|g| g.clone())
+                .collect(),
             tag: tag.to_string(),
             method: method.clone(),
             yml_content: yml_content,
