@@ -85,7 +85,7 @@ async fn init_and_run(args: &args::types::Args) {
 
 fn main() {
     let args = args::types::get_args();
-    match tokio::runtime::Builder::new_current_thread()
+    match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
     {

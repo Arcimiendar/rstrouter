@@ -1,12 +1,10 @@
-use log::{debug, warn};
+use log::warn;
 use rquickjs::{
     Context as JsContext, Ctx as JsCtx, IntoJs, Result as JsResult, Runtime as JsRuntime,
     Value as JsValue,
 };
 use serde_json::{Value as JsonValue, json};
 use std::cell::RefCell;
-use std::sync::{Mutex, mpsc};
-use std::thread;
 
 use crate::endpoints::types::Request;
 
@@ -25,6 +23,7 @@ pub struct ReturnValue {
 // as long as it stays inside that feature is fine.
 // checked that drop is correct on the end of request.
 // moved JS executor to a separate thread an leaft it hanging there
+// Updated: made it unsafe impl Send and Sync
 
 impl<'js> IntoJs<'js> for Request {
     fn into_js(self, ctx: &JsCtx<'js>) -> JsResult<JsValue<'js>> {
@@ -37,13 +36,16 @@ impl<'js> IntoJs<'js> for Request {
     }
 }
 
-pub struct LocalContext {
+pub struct Context {
     pub context: Option<JsContext>,
     pub status_code: RefCell<u16>,
     pub return_json: RefCell<JsonValue>,
 }
 
-impl LocalContext {
+unsafe impl Send for Context {}
+unsafe impl Sync for Context {}
+
+impl Context {
     pub fn from_request(request: Request, dsl_path: &str) -> Self {
         let context = Self::get_context(request).ok();
         let ctx = Self {
@@ -127,128 +129,14 @@ impl LocalContext {
     fn is_template_string(&self, expr: &str) -> bool {
         expr.contains("${") && expr.contains("}")
     }
-}
-
-enum Command {
-    EvaluateExpr(String),
-    Exit,
-    SetReturnValue(u16, JsonValue),
-    GetReturnValue,
-}
-
-enum Reply {
-    Json(JsonValue),
-    RetValue(ReturnValue),
-}
-
-#[derive(Debug)]
-pub struct Context {
-    thread: Option<thread::JoinHandle<()>>,
-    tx: mpsc::Sender<Command>,
-    rx: Mutex<mpsc::Receiver<Reply>>,
-}
-
-impl Context {
-    pub fn from_request(request: Request, dsl_path: &str) -> Self {
-        let (tx, rx) = mpsc::channel::<Command>();
-        let (tx_b, rx_b) = mpsc::channel::<Reply>();
-        let dsl_path_thread_local = dsl_path.to_string();
-        let thread = thread::spawn(move || {
-            let ctx = LocalContext::from_request(request, &dsl_path_thread_local);
-
-            for command in rx.iter() {
-                match command {
-                    Command::EvaluateExpr(s) => {
-                        if tx_b.send(Reply::Json(ctx.evaluate_expr(&s))).is_err() {
-                            return;
-                        };
-                    }
-                    Command::SetReturnValue(s, v) => {
-                        *ctx.return_json.borrow_mut() = v;
-                        *ctx.status_code.borrow_mut() = s;
-                    }
-                    Command::GetReturnValue => {
-                        if tx_b.send(Reply::RetValue(ctx.get_return_value())).is_err() {
-                            return;
-                        }
-                    }
-                    Command::Exit => return,
-                };
-            }
-        });
-
-        Self {
-            thread: Some(thread),
-            tx,
-            rx: Mutex::new(rx_b),
-        }
-    }
-
-    pub fn evaluate_expr(&self, expr: &str) -> JsonValue {
-        if self
-            .tx
-            .send(Command::EvaluateExpr(expr.to_string()))
-            .is_err()
-        {
-            return JsonValue::Null;
-        };
-        let obj = self
-            .rx
-            .lock()
-            .ok()
-            .and_then(|v| v.recv().ok())
-            .unwrap_or(Reply::Json(JsonValue::Null));
-
-        match obj {
-            Reply::RetValue(_) => {
-                panic!("Something wrong with thread sync in context and localcontext");
-            }
-            Reply::Json(v) => v,
-        }
-    }
-
-    pub fn get_return_value(&self) -> ReturnValue {
-        if self.tx.send(Command::GetReturnValue).is_err() {
-            panic!("Something wrong with thread sync in context and localcontext");
-        };
-        let obj = self
-            .rx
-            .lock()
-            .ok()
-            .and_then(|v| v.recv().ok())
-            .unwrap_or(Reply::Json(JsonValue::Null));
-
-        match obj {
-            Reply::Json(_) => {
-                panic!("Something wrong with thread sync in context and localcontext");
-            }
-            Reply::RetValue(v) => v,
-        }
-    }
 
     pub fn set_return_value(&self, status_code: u16, value: JsonValue) {
-        if self
-            .tx
-            .send(Command::SetReturnValue(status_code, value))
-            .is_err()
-        {
-            panic!("Something wrong with thread sync in context and localcontext");
-        }
+        *self.return_json.borrow_mut() = value;
+        *self.status_code.borrow_mut() = status_code;
     }
 
     pub fn wrap_js_code(code: &str) -> String {
         format!("${{{}!}}", code)
-    }
-}
-
-impl Drop for Context {
-    fn drop(&mut self) {
-        debug!("context is dropped");
-        self.tx.send(Command::Exit).ok();
-        if let Some(thread) = self.thread.take() {
-            thread.join().ok();
-            debug!("thread is joined");
-        }
     }
 }
 
