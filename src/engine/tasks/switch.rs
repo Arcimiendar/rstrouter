@@ -133,15 +133,21 @@ mod test {
 
         let context = Context::from_request(Request::default(), "./unittest_dsl").await;
 
-        context.evaluate_expr(&Context::wrap_js_code("var some = 1;")).await;
+        context
+            .evaluate_expr(&Context::wrap_js_code("var some = 1;"))
+            .await;
         let res = task.execute(context).await;
         assert_eq!(res.1.unwrap(), "one");
 
-        res.0.evaluate_expr(&Context::wrap_js_code("var some = 2;")).await;
+        res.0
+            .evaluate_expr(&Context::wrap_js_code("var some = 2;"))
+            .await;
         let res = task.execute(res.0).await;
         assert_eq!(res.1.unwrap(), "two");
 
-        res.0.evaluate_expr(&Context::wrap_js_code("var some = 3;")).await;
+        res.0
+            .evaluate_expr(&Context::wrap_js_code("var some = 3;"))
+            .await;
         let res = task.execute(res.0).await;
         assert_eq!(res.1.unwrap(), "third");
     }

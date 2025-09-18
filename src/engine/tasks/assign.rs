@@ -1,8 +1,8 @@
 use crate::engine::context::Context;
 use crate::engine::tasks::task::{ExecutionResult, Task, TaskFactory, render_obj};
 use async_trait::async_trait;
-use log::warn;
 use futures::future::join_all;
+use log::warn;
 use serde_yaml_ng::Value as YmlValue;
 
 #[derive(Debug)]
@@ -47,15 +47,18 @@ impl AssignFactory {
 impl Task for Assign {
     async fn execute(&self, context: Context) -> ExecutionResult {
         let rendered = render_obj(&self.assign_expr, &context).await;
-        join_all(rendered
-            .as_object()
-            .iter()
-            .flat_map(|f| f.iter())
-            .map(|(k, v)| (k, v.to_string()))
-            .map(|(k, v)| Context::wrap_js_code(&format!("var {} = {};", k, v)))
-            .map(async |expr| {
-                context.evaluate_expr(&expr).await;
-            })).await;
+        join_all(
+            rendered
+                .as_object()
+                .iter()
+                .flat_map(|f| f.iter())
+                .map(|(k, v)| (k, v.to_string()))
+                .map(|(k, v)| Context::wrap_js_code(&format!("var {} = {};", k, v)))
+                .map(async |expr| {
+                    context.evaluate_expr(&expr).await;
+                }),
+        )
+        .await;
 
         ExecutionResult(context, self.next_task.clone())
     }

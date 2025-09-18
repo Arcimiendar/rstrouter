@@ -168,7 +168,9 @@ mod test {
 
         let context = Context::from_request(Request::default(), "./unittest_dsl").await;
 
-        context.evaluate_expr(&Context::wrap_js_code("var some = {a: '123'};")).await;
+        context
+            .evaluate_expr(&Context::wrap_js_code("var some = {a: '123'};"))
+            .await;
 
         let res = task.execute(context).await;
         let res_v = res.0.get_return_value();
@@ -206,7 +208,9 @@ mod test {
 
         let context = Context::from_request(Request::default(), "./unittest_dsl").await;
 
-        context.evaluate_expr(&Context::wrap_js_code("var some = {a: '123'};")).await;
+        context
+            .evaluate_expr(&Context::wrap_js_code("var some = {a: '123'};"))
+            .await;
 
         let res = task.execute(context).await;
         let res_v = res.0.get_return_value();

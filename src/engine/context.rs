@@ -1,6 +1,6 @@
 use log::warn;
 use rquickjs::{
-    AsyncContext as AsynJsContext, Ctx as JsCtx, IntoJs, Result as JsResult, AsyncRuntime as AsyncJsRuntime,
+    AsyncContext as AsynJsContext, AsyncRuntime as AsyncJsRuntime, IntoJs, Result as JsResult,
     Value as JsValue,
 };
 use serde_json::{Value as JsonValue, json};
@@ -12,28 +12,6 @@ use crate::endpoints::types::Request;
 pub struct ReturnValue {
     pub json: JsonValue,
     pub status: u16,
-}
-
-// unsafe impl Send for Context {}
-// I'm tired fighting rust. Context will not be executed in multiple thread.
-// and always be operatable inside single thread
-// I have no idea how to fight borrow checker here
-// compiles error explains nothing
-// https://users.rust-lang.org/t/why-must-local-variables-in-async-functions-satisfy-send/58348/12
-// as long as it stays inside that feature is fine.
-// checked that drop is correct on the end of request.
-// moved JS executor to a separate thread an leaft it hanging there
-// Updated: made it unsafe impl Send and Sync
-
-impl<'js> IntoJs<'js> for Request {
-    fn into_js(self, ctx: &JsCtx<'js>) -> JsResult<JsValue<'js>> {
-        // TODO implement path parsing?
-        rquickjs_serde::to_value(ctx.clone(), self).map_err(|e| rquickjs::Error::IntoJs {
-            from: "Request",
-            to: "Value",
-            message: Some(format!("cannot init incoming object from request: {}", e)),
-        })
-    }
 }
 
 pub struct Context {
@@ -54,7 +32,8 @@ impl Context {
         ctx.evaluate_expr(&Context::wrap_js_code(&format!(
             "var dsl = {}",
             JsonValue::String(dsl_path.to_string())
-        ))).await;
+        )))
+        .await;
         ctx
     }
 
@@ -62,12 +41,14 @@ impl Context {
         let rt = AsyncJsRuntime::new()?;
         let context = AsynJsContext::full(&rt).await?;
 
-        context.with(|ctx| -> JsResult<()> {
-            let incoming = request.into_js(&ctx)?;
-            ctx.globals().set("incoming", incoming)?;
+        context
+            .with(|ctx| -> JsResult<()> {
+                let incoming = request.into_js(&ctx)?;
+                ctx.globals().set("incoming", incoming)?;
 
-            Ok(())
-        }).await?;
+                Ok(())
+            })
+            .await?;
 
         Ok(context)
     }
@@ -91,12 +72,14 @@ impl Context {
         };
 
         if let Some(context) = &self.context {
-            return context.with(|ctx| -> JsonValue {
-                ctx.eval(source)
-                    .ok()
-                    .and_then(|v: JsValue| rquickjs_serde::from_value(v).ok())
-                    .unwrap_or(JsonValue::Null)
-            }).await;
+            return context
+                .with(|ctx| -> JsonValue {
+                    ctx.eval(source)
+                        .ok()
+                        .and_then(|v: JsValue| rquickjs_serde::from_value(v).ok())
+                        .unwrap_or(JsonValue::Null)
+                })
+                .await;
         } else {
             warn!("Failed to create runtime for js. returning Null");
             return JsonValue::Null;
@@ -107,11 +90,15 @@ impl Context {
         let expr_copy = expr.to_string();
 
         if self.is_obj(&expr_copy) {
-            return self.execute_js_signle_line(&expr_copy[2..expr_copy.len() - 1]).await;
+            return self
+                .execute_js_signle_line(&expr_copy[2..expr_copy.len() - 1])
+                .await;
         }
 
         if self.is_template_string(expr) {
-            return self.execute_js_signle_line(&format!("`{}`", expr_copy)).await;
+            return self
+                .execute_js_signle_line(&format!("`{}`", expr_copy))
+                .await;
         }
 
         json!(expr_copy)
@@ -151,7 +138,8 @@ mod test {
         let mut context = Context::from_request(
             Request::new(headers, json!({"a" : ["c"]}), query),
             "./unittest_dsl",
-        ).await;
+        )
+        .await;
 
         let res = context.evaluate_expr("1 ${incoming.params.a}").await;
         assert_eq!(res, "1 b");
@@ -167,7 +155,9 @@ mod test {
         assert_eq!(res.json, json!({"hello": "world"}));
         assert_eq!(res.status, 201);
 
-        context.evaluate_expr(&Context::wrap_js_code("let someVar = 33;")).await;
+        context
+            .evaluate_expr(&Context::wrap_js_code("let someVar = 33;"))
+            .await;
         let res = context.evaluate_expr("${someVar}").await;
         assert_eq!(res, 33);
 

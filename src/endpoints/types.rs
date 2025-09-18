@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use axum::extract::{FromRequest, Json, Request as AxumRequest};
+use rquickjs::{Ctx as JsCtx, IntoJs, Result as JsResult, Value as JsValue};
 use serde::Serialize;
 use serde_json::Value as JsonValue;
 
@@ -9,6 +10,17 @@ pub struct Request {
     params: HashMap<String, String>,
     headers: HashMap<String, String>,
     body: JsonValue,
+}
+
+impl<'js> IntoJs<'js> for Request {
+    fn into_js(self, ctx: &JsCtx<'js>) -> JsResult<JsValue<'js>> {
+        // TODO implement path parsing?
+        rquickjs_serde::to_value(ctx.clone(), self).map_err(|e| rquickjs::Error::IntoJs {
+            from: "Request",
+            to: "Value",
+            message: Some(format!("cannot init incoming object from request: {}", e)),
+        })
+    }
 }
 
 impl Request {

@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use serde_yaml_ng::Value as YmlValue;
 use futures::future::join_all;
+use serde_yaml_ng::Value as YmlValue;
 
 use crate::endpoints::types::Request;
 use crate::engine::Engine;
@@ -79,7 +79,9 @@ struct Template {
 impl Task for Template {
     async fn execute(&self, context: Context) -> ExecutionResult {
         // TODO: make template format ruuter compatible
-        let evalueated_expr = context.evaluate_expr(&format!("${{dsl}}/{}", self.template_path)).await;
+        let evalueated_expr = context
+            .evaluate_expr(&format!("${{dsl}}/{}", self.template_path))
+            .await;
         let rendered_path = evalueated_expr.as_str().unwrap_or(&self.template_path);
         let template = std::fs::read_to_string(rendered_path)
             .ok()
@@ -94,11 +96,13 @@ impl Task for Template {
         let request = self.create_request(&context).await;
         let result = internal_engine.execute(request).await;
         if let Some(r) = &self.result {
-            context.evaluate_expr(&Context::wrap_js_code(&format!(
-                "let {} = {};",
-                r,
-                result.0.to_string()
-            ))).await;
+            context
+                .evaluate_expr(&Context::wrap_js_code(&format!(
+                    "let {} = {};",
+                    r,
+                    result.0.to_string()
+                )))
+                .await;
         }
 
         ExecutionResult(context, self.next_task.clone())
@@ -112,21 +116,25 @@ impl Task for Template {
 impl Template {
     async fn create_request(&self, context: &Context) -> Request {
         let body = render_obj(&self.body, context).await;
-        let headers = join_all(self
-            .headers
-            .iter()
-            .map(async |(k, v)| (k.to_string(), context.evaluate_expr(v).await))
-        ).await.into_iter()
-            .flat_map(|(k, v)| Some((k, v.as_str()?.to_string())))
-            .collect();
+        let headers = join_all(
+            self.headers
+                .iter()
+                .map(async |(k, v)| (k.to_string(), context.evaluate_expr(v).await)),
+        )
+        .await
+        .into_iter()
+        .flat_map(|(k, v)| Some((k, v.as_str()?.to_string())))
+        .collect();
 
-        let query = join_all(self
-            .query
-            .iter()
-            .map(async |(k, v)| (k.to_string(), context.evaluate_expr(v).await))
-        ).await.into_iter()
-            .flat_map(|(k, v)| Some((k, v.as_str()?.to_string())))
-            .collect();
+        let query = join_all(
+            self.query
+                .iter()
+                .map(async |(k, v)| (k.to_string(), context.evaluate_expr(v).await)),
+        )
+        .await
+        .into_iter()
+        .flat_map(|(k, v)| Some((k, v.as_str()?.to_string())))
+        .collect();
 
         Request::new(headers, body, query)
     }

@@ -49,22 +49,29 @@ pub struct HttpArgs {
 
 impl HttpArgs {
     async fn render_headers(&self, context: &Context) -> HeaderMap {
-        join_all(self.headers
-            .iter()
-            .map(async |(k, v)| Some((HeaderName::from_str(k).ok()?, context.evaluate_expr(v).await)))
-        ).await.into_iter()
-            .flat_map(|o| o)
-            .flat_map(|(k, v)| Some((k, HeaderValue::from_str(v.as_str()?).ok()?)))
-            .collect()
+        join_all(self.headers.iter().map(async |(k, v)| {
+            Some((
+                HeaderName::from_str(k).ok()?,
+                context.evaluate_expr(v).await,
+            ))
+        }))
+        .await
+        .into_iter()
+        .flat_map(|o| o)
+        .flat_map(|(k, v)| Some((k, HeaderValue::from_str(v.as_str()?).ok()?)))
+        .collect()
     }
 
     async fn render_query(&self, context: &Context) -> HashMap<String, String> {
-        join_all(self.query
-            .iter()
-            .map(async |(k, v)| (k.to_string(), context.evaluate_expr(v).await))
-        ).await.into_iter()
-            .flat_map(|(k, v)| Some((k, v.as_str()?.to_string())))
-            .collect()
+        join_all(
+            self.query
+                .iter()
+                .map(async |(k, v)| (k.to_string(), context.evaluate_expr(v).await)),
+        )
+        .await
+        .into_iter()
+        .flat_map(|(k, v)| Some((k, v.as_str()?.to_string())))
+        .collect()
     }
 
     async fn render_body(&self, context: &Context) -> JsonValue {
@@ -197,11 +204,13 @@ impl Task for Http {
         let response = self.args.do_request(&context).await;
 
         if let Some(result_name) = &self.result {
-            context.evaluate_expr(&Context::wrap_js_code(&format!(
-                "var {} = {};",
-                result_name,
-                response.to_string()
-            ))).await;
+            context
+                .evaluate_expr(&Context::wrap_js_code(&format!(
+                    "var {} = {};",
+                    result_name,
+                    response.to_string()
+                )))
+                .await;
         }
         ExecutionResult(context, self.next_task.clone())
     }

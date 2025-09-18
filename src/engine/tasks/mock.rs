@@ -55,11 +55,13 @@ impl Task for Mock {
         let rendered = render_obj(&self.args, &context).await;
 
         if let Some(res) = &self.result {
-            context.evaluate_expr(&Context::wrap_js_code(&format!(
-                "var {} = {};",
-                res,
-                rendered.to_string()
-            ))).await;
+            context
+                .evaluate_expr(&Context::wrap_js_code(&format!(
+                    "var {} = {};",
+                    res,
+                    rendered.to_string()
+                )))
+                .await;
         }
 
         if self.sleep_mcs > 0 {

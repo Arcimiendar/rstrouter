@@ -4,8 +4,8 @@ use serde_json::Value as JsonValue;
 use std::env;
 use std::fmt::Debug;
 
-use serde_yaml_ng::Value as YmlValue;
 use futures::future::join_all;
+use serde_yaml_ng::Value as YmlValue;
 
 use crate::engine::context::Context;
 
@@ -49,10 +49,17 @@ pub trait TaskFactory: Debug {
 pub async fn render_obj(yml: &YmlValue, context: &Context) -> JsonValue {
     match yml {
         YmlValue::Bool(v) => JsonValue::Bool(v.clone()),
-        YmlValue::Mapping(m) => JsonValue::Object(
-            join_all(m.iter()
-                .map(async |(k, v)| Some((k.as_str()?.to_string(), render_obj(v, context).await)))).await.into_iter().flat_map(|o| o).collect()
-        ),
+        YmlValue::Mapping(m) => {
+            JsonValue::Object(
+                join_all(m.iter().map(async |(k, v)| {
+                    Some((k.as_str()?.to_string(), render_obj(v, context).await))
+                }))
+                .await
+                .into_iter()
+                .flat_map(|o| o)
+                .collect(),
+            )
+        }
         YmlValue::Null => JsonValue::Null,
         YmlValue::Number(v) => serde_json::to_value(v)
             .map_err(|e| {
