@@ -4,7 +4,7 @@ use rquickjs::{
     Value as JsValue,
 };
 use serde_json::{Value as JsonValue, json};
-use std::cell::RefCell;
+use std::sync::RwLock;
 
 use crate::endpoints::types::Request;
 
@@ -38,19 +38,16 @@ impl<'js> IntoJs<'js> for Request {
 
 pub struct Context {
     pub context: Option<JsContext>,
-    pub status_code: RefCell<u16>,
-    pub return_json: RefCell<JsonValue>,
+    pub status_code: RwLock<u16>,
+    pub return_json: RwLock<JsonValue>,
 }
-
-unsafe impl Send for Context {}
-unsafe impl Sync for Context {}
 
 impl Context {
     pub fn from_request(request: Request, dsl_path: &str) -> Self {
         let context = Self::get_context(request).ok();
         let ctx = Self {
-            status_code: RefCell::new(200),
-            return_json: RefCell::new(JsonValue::Null),
+            status_code: RwLock::new(200),
+            return_json: RwLock::new(JsonValue::Null),
             context: context,
         };
 
@@ -58,7 +55,6 @@ impl Context {
             "var dsl = {}",
             JsonValue::String(dsl_path.to_string())
         )));
-
         ctx
     }
 
@@ -78,8 +74,12 @@ impl Context {
 
     pub fn get_return_value(&self) -> ReturnValue {
         ReturnValue {
-            json: self.return_json.borrow().clone(),
-            status: self.status_code.borrow().clone(),
+            json: self
+                .return_json
+                .read()
+                .map(|r| r.clone())
+                .unwrap_or(JsonValue::Null),
+            status: self.status_code.read().map(|r| r.clone()).unwrap_or(500),
         }
     }
 
@@ -94,9 +94,7 @@ impl Context {
             return context.with(|ctx| -> JsonValue {
                 ctx.eval(source)
                     .ok()
-                    .and_then(|v: JsValue| {
-                        rquickjs_serde::from_value(v).ok()
-                    })
+                    .and_then(|v: JsValue| rquickjs_serde::from_value(v).ok())
                     .unwrap_or(JsonValue::Null)
             });
         } else {
@@ -130,9 +128,9 @@ impl Context {
         expr.contains("${") && expr.contains("}")
     }
 
-    pub fn set_return_value(&self, status_code: u16, value: JsonValue) {
-        *self.return_json.borrow_mut() = value;
-        *self.status_code.borrow_mut() = status_code;
+    pub fn set_return_value(&mut self, status_code: u16, value: JsonValue) {
+        self.return_json.get_mut().map(|r| *r = value).ok();
+        self.status_code.get_mut().map(|r| *r = status_code).ok();
     }
 
     pub fn wrap_js_code(code: &str) -> String {
@@ -150,7 +148,7 @@ mod test {
     fn test_context() {
         let headers = HashMap::from([("test".to_string(), "1234".to_string())]);
         let query = HashMap::from([("a".to_string(), "b".to_string())]);
-        let context = Context::from_request(
+        let mut context = Context::from_request(
             Request::new(headers, json!({"a" : ["c"]}), query),
             "./unittest_dsl",
         );

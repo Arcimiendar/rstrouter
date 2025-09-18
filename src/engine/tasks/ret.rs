@@ -45,7 +45,7 @@ impl RetFactory {
 
 #[async_trait]
 impl Task for Ret {
-    async fn execute(&self, context: Context) -> ExecutionResult {
+    async fn execute(&self, mut context: Context) -> ExecutionResult {
         let return_value = render_obj(&self.return_expr, &context);
         context.set_return_value(self.status_code, return_value);
 
