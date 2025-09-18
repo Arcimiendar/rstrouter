@@ -10,6 +10,7 @@ use crate::engine::context::Context;
 use crate::engine::tasks::task::{ExecutionResult, Task, TaskFactory, render_obj};
 
 use async_trait::async_trait;
+use futures::future::join_all;
 use serde_yaml_ng::Value as YmlValue;
 
 #[derive(Debug)]
@@ -47,24 +48,27 @@ pub struct HttpArgs {
 }
 
 impl HttpArgs {
-    fn render_headers(&self, context: &Context) -> HeaderMap {
-        self.headers
+    async fn render_headers(&self, context: &Context) -> HeaderMap {
+        join_all(self.headers
             .iter()
-            .flat_map(|(k, v)| Some((HeaderName::from_str(k).ok()?, context.evaluate_expr(v))))
+            .map(async |(k, v)| Some((HeaderName::from_str(k).ok()?, context.evaluate_expr(v).await)))
+        ).await.into_iter()
+            .flat_map(|o| o)
             .flat_map(|(k, v)| Some((k, HeaderValue::from_str(v.as_str()?).ok()?)))
             .collect()
     }
 
-    fn render_query(&self, context: &Context) -> HashMap<String, String> {
-        self.query
+    async fn render_query(&self, context: &Context) -> HashMap<String, String> {
+        join_all(self.query
             .iter()
-            .map(|(k, v)| (k.to_string(), context.evaluate_expr(v)))
+            .map(async |(k, v)| (k.to_string(), context.evaluate_expr(v).await))
+        ).await.into_iter()
             .flat_map(|(k, v)| Some((k, v.as_str()?.to_string())))
             .collect()
     }
 
-    fn render_body(&self, context: &Context) -> JsonValue {
-        render_obj(&self.body, context)
+    async fn render_body(&self, context: &Context) -> JsonValue {
+        render_obj(&self.body, context).await
     }
 
     async fn render_response(&self, response: Response) -> JsonValue {
@@ -81,14 +85,14 @@ impl HttpArgs {
     }
 
     async fn do_request(&self, context: &Context) -> JsonValue {
-        let evaluate_result = context.evaluate_expr(&self.url);
+        let evaluate_result = context.evaluate_expr(&self.url).await;
         let url = evaluate_result.as_str().unwrap_or(&self.url);
         let request_result = self
             .method
             .to_request_builder(url)
-            .headers(self.render_headers(&context))
-            .query(&self.render_query(context))
-            .json(&self.render_body(context))
+            .headers(self.render_headers(&context).await)
+            .query(&self.render_query(context).await)
+            .json(&self.render_body(context).await)
             .send()
             .await;
 
@@ -197,7 +201,7 @@ impl Task for Http {
                 "var {} = {};",
                 result_name,
                 response.to_string()
-            )));
+            ))).await;
         }
         ExecutionResult(context, self.next_task.clone())
     }
@@ -285,14 +289,14 @@ mod test {
             assert!(obj.is_some());
             let task = obj.unwrap();
 
-            let context = Context::from_request(Request::default(), "./unittest_dsl");
+            let context = Context::from_request(Request::default(), "./unittest_dsl").await;
 
             let res = task.execute(context).await;
             mock.assert();
 
             let ctx = res.0;
 
-            let response = ctx.evaluate_expr("${res.response.body.ok}");
+            let response = ctx.evaluate_expr("${res.response.body.ok}").await;
             assert_eq!(response, "is ok!");
         }
     }
@@ -331,14 +335,14 @@ mod test {
         assert!(obj.is_some());
         let task = obj.unwrap();
 
-        let context = Context::from_request(Request::default(), "./unittest_dsl");
+        let context = Context::from_request(Request::default(), "./unittest_dsl").await;
 
         let res = task.execute(context).await;
         mock.assert();
 
         let ctx = res.0;
 
-        let response = ctx.evaluate_expr("${res.response.body.ok}");
+        let response = ctx.evaluate_expr("${res.response.body.ok}").await;
         assert_eq!(response, "is ok!");
     }
 }

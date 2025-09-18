@@ -97,7 +97,7 @@ impl Engine {
     }
 
     pub async fn execute(&self, request: Request) -> EngineResponse {
-        let mut context = Context::from_request(request, &self.dsl_path);
+        let mut context = Context::from_request(request, &self.dsl_path).await;
         for guard in &self.guards {
             context = guard.walk_through(context).await;
             let return_value = context.get_return_value();

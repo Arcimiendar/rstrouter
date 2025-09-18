@@ -1,6 +1,6 @@
 use log::warn;
 use rquickjs::{
-    Context as JsContext, Ctx as JsCtx, IntoJs, Result as JsResult, Runtime as JsRuntime,
+    AsyncContext as AsynJsContext, Ctx as JsCtx, IntoJs, Result as JsResult, AsyncRuntime as AsyncJsRuntime,
     Value as JsValue,
 };
 use serde_json::{Value as JsonValue, json};
@@ -37,14 +37,14 @@ impl<'js> IntoJs<'js> for Request {
 }
 
 pub struct Context {
-    pub context: Option<JsContext>,
+    pub context: Option<AsynJsContext>,
     pub status_code: RwLock<u16>,
     pub return_json: RwLock<JsonValue>,
 }
 
 impl Context {
-    pub fn from_request(request: Request, dsl_path: &str) -> Self {
-        let context = Self::get_context(request).ok();
+    pub async fn from_request(request: Request, dsl_path: &str) -> Self {
+        let context = Self::get_context(request).await.ok();
         let ctx = Self {
             status_code: RwLock::new(200),
             return_json: RwLock::new(JsonValue::Null),
@@ -54,20 +54,20 @@ impl Context {
         ctx.evaluate_expr(&Context::wrap_js_code(&format!(
             "var dsl = {}",
             JsonValue::String(dsl_path.to_string())
-        )));
+        ))).await;
         ctx
     }
 
-    fn get_context(request: Request) -> JsResult<JsContext> {
-        let rt = JsRuntime::new()?;
-        let context = JsContext::full(&rt)?;
+    async fn get_context(request: Request) -> JsResult<AsynJsContext> {
+        let rt = AsyncJsRuntime::new()?;
+        let context = AsynJsContext::full(&rt).await?;
 
         context.with(|ctx| -> JsResult<()> {
             let incoming = request.into_js(&ctx)?;
             ctx.globals().set("incoming", incoming)?;
 
             Ok(())
-        })?;
+        }).await?;
 
         Ok(context)
     }
@@ -83,7 +83,7 @@ impl Context {
         }
     }
 
-    fn execute_js_signle_line(&self, expr: &str) -> JsonValue {
+    async fn execute_js_signle_line(&self, expr: &str) -> JsonValue {
         let source = if expr.ends_with('!') {
             &expr[0..expr.len() - 1]
         } else {
@@ -96,22 +96,22 @@ impl Context {
                     .ok()
                     .and_then(|v: JsValue| rquickjs_serde::from_value(v).ok())
                     .unwrap_or(JsonValue::Null)
-            });
+            }).await;
         } else {
             warn!("Failed to create runtime for js. returning Null");
             return JsonValue::Null;
         }
     }
 
-    pub fn evaluate_expr(&self, expr: &str) -> JsonValue {
+    pub async fn evaluate_expr(&self, expr: &str) -> JsonValue {
         let expr_copy = expr.to_string();
 
         if self.is_obj(&expr_copy) {
-            return self.execute_js_signle_line(&expr_copy[2..expr_copy.len() - 1]);
+            return self.execute_js_signle_line(&expr_copy[2..expr_copy.len() - 1]).await;
         }
 
         if self.is_template_string(expr) {
-            return self.execute_js_signle_line(&format!("`{}`", expr_copy));
+            return self.execute_js_signle_line(&format!("`{}`", expr_copy)).await;
         }
 
         json!(expr_copy)
@@ -144,22 +144,22 @@ mod test {
     use serde_json::json;
     use std::collections::HashMap;
 
-    #[test]
-    fn test_context() {
+    #[tokio::test]
+    async fn test_context() {
         let headers = HashMap::from([("test".to_string(), "1234".to_string())]);
         let query = HashMap::from([("a".to_string(), "b".to_string())]);
         let mut context = Context::from_request(
             Request::new(headers, json!({"a" : ["c"]}), query),
             "./unittest_dsl",
-        );
+        ).await;
 
-        let res = context.evaluate_expr("1 ${incoming.params.a}");
+        let res = context.evaluate_expr("1 ${incoming.params.a}").await;
         assert_eq!(res, "1 b");
-        let res = context.evaluate_expr("${incoming.body.a}");
+        let res = context.evaluate_expr("${incoming.body.a}").await;
         assert_eq!(res, json!(["c"]));
-        let res = context.evaluate_expr("do not modify");
+        let res = context.evaluate_expr("do not modify").await;
         assert_eq!(res, "do not modify");
-        let res = context.evaluate_expr("${incoming.headers.test}");
+        let res = context.evaluate_expr("${incoming.headers.test}").await;
         assert_eq!(res, "1234");
 
         context.set_return_value(201, json!({"hello": "world"}));
@@ -167,11 +167,11 @@ mod test {
         assert_eq!(res.json, json!({"hello": "world"}));
         assert_eq!(res.status, 201);
 
-        context.evaluate_expr(&Context::wrap_js_code("let someVar = 33;"));
-        let res = context.evaluate_expr("${someVar}");
+        context.evaluate_expr(&Context::wrap_js_code("let someVar = 33;")).await;
+        let res = context.evaluate_expr("${someVar}").await;
         assert_eq!(res, 33);
 
-        let res = context.evaluate_expr("${dsl}");
+        let res = context.evaluate_expr("${dsl}").await;
         assert_eq!("./unittest_dsl", res);
 
         drop(context);

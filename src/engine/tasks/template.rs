@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use serde_yaml_ng::Value as YmlValue;
+use futures::future::join_all;
 
 use crate::endpoints::types::Request;
 use crate::engine::Engine;
@@ -78,26 +79,26 @@ struct Template {
 impl Task for Template {
     async fn execute(&self, context: Context) -> ExecutionResult {
         // TODO: make template format ruuter compatible
-        let evalueated_expr = context.evaluate_expr(&format!("${{dsl}}/{}", self.template_path));
+        let evalueated_expr = context.evaluate_expr(&format!("${{dsl}}/{}", self.template_path)).await;
         let rendered_path = evalueated_expr.as_str().unwrap_or(&self.template_path);
         let template = std::fs::read_to_string(rendered_path)
             .ok()
             .and_then(|s| serde_yaml_ng::from_str(&s).ok())
             .unwrap_or(YmlValue::Null);
-        let dsl_val = context.evaluate_expr("${dsl}");
+        let dsl_val = context.evaluate_expr("${dsl}").await;
         // will never be the value from the unwrap_or "./unittest_dsl here, because the value is always there
         let dsl_path = dsl_val.as_str().unwrap_or("./unittest_dsl");
 
         let internal_engine = Engine::from_template(&template, dsl_path);
 
-        let request = self.create_request(&context);
+        let request = self.create_request(&context).await;
         let result = internal_engine.execute(request).await;
         if let Some(r) = &self.result {
             context.evaluate_expr(&Context::wrap_js_code(&format!(
                 "let {} = {};",
                 r,
                 result.0.to_string()
-            )));
+            ))).await;
         }
 
         ExecutionResult(context, self.next_task.clone())
@@ -109,19 +110,21 @@ impl Task for Template {
 }
 
 impl Template {
-    fn create_request(&self, context: &Context) -> Request {
-        let body = render_obj(&self.body, context);
-        let headers = self
+    async fn create_request(&self, context: &Context) -> Request {
+        let body = render_obj(&self.body, context).await;
+        let headers = join_all(self
             .headers
             .iter()
-            .map(|(k, v)| (k.to_string(), context.evaluate_expr(v)))
+            .map(async |(k, v)| (k.to_string(), context.evaluate_expr(v).await))
+        ).await.into_iter()
             .flat_map(|(k, v)| Some((k, v.as_str()?.to_string())))
             .collect();
 
-        let query = self
+        let query = join_all(self
             .query
             .iter()
-            .map(|(k, v)| (k.to_string(), context.evaluate_expr(v)))
+            .map(async |(k, v)| (k.to_string(), context.evaluate_expr(v).await))
+        ).await.into_iter()
             .flat_map(|(k, v)| Some((k, v.as_str()?.to_string())))
             .collect();
 
@@ -181,12 +184,12 @@ mod test {
         assert!(obj.is_some());
         let task = obj.unwrap();
 
-        let context = Context::from_request(Request::default(), "./unittest_dsl");
+        let context = Context::from_request(Request::default(), "./unittest_dsl").await;
 
         let res = task.execute(context).await;
         let context = res.0;
 
-        let res = context.evaluate_expr("${res}");
+        let res = context.evaluate_expr("${res}").await;
 
         assert_eq!(
             *res.get("response").unwrap(),

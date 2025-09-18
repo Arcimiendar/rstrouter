@@ -5,6 +5,7 @@ use std::env;
 use std::fmt::Debug;
 
 use serde_yaml_ng::Value as YmlValue;
+use futures::future::join_all;
 
 use crate::engine::context::Context;
 
@@ -45,13 +46,12 @@ pub trait TaskFactory: Debug {
     }
 }
 
-pub fn render_obj(yml: &YmlValue, context: &Context) -> JsonValue {
+pub async fn render_obj(yml: &YmlValue, context: &Context) -> JsonValue {
     match yml {
         YmlValue::Bool(v) => JsonValue::Bool(v.clone()),
         YmlValue::Mapping(m) => JsonValue::Object(
-            m.iter()
-                .flat_map(|(k, v)| Some((k.as_str()?.to_string(), render_obj(v, context))))
-                .collect(),
+            join_all(m.iter()
+                .map(async |(k, v)| Some((k.as_str()?.to_string(), render_obj(v, context).await)))).await.into_iter().flat_map(|o| o).collect()
         ),
         YmlValue::Null => JsonValue::Null,
         YmlValue::Number(v) => serde_json::to_value(v)
@@ -61,9 +61,9 @@ pub fn render_obj(yml: &YmlValue, context: &Context) -> JsonValue {
             })
             .unwrap_or(JsonValue::Null),
         YmlValue::Sequence(v) => {
-            JsonValue::Array(v.iter().map(|el| render_obj(el, context)).collect())
+            JsonValue::Array(join_all(v.iter().map(async |el| render_obj(el, context).await)).await)
         }
-        YmlValue::String(s) => context.evaluate_expr(s),
+        YmlValue::String(s) => context.evaluate_expr(s).await,
         YmlValue::Tagged(_) => {
             warn!("Tags not supported by json: {:?}", yml);
             JsonValue::Null
@@ -258,9 +258,9 @@ mod test {
         );
     }
 
-    #[test]
-    fn render_obj_test() {
-        let context = Context::from_request(Request::default(), "./unittest_dsl");
+    #[tokio::test]
+    async fn render_obj_test() {
+        let context = Context::from_request(Request::default(), "./unittest_dsl").await;
 
         let yml: YmlValue = serde_yaml_ng::from_str(
             r#"
@@ -275,7 +275,7 @@ mod test {
         )
         .unwrap();
 
-        let v = render_obj(&yml, &context);
+        let v = render_obj(&yml, &context).await;
         let obj = v.get("obj").unwrap();
         assert!(obj.is_object());
         assert_eq!(obj.get("str").unwrap(), "some string");

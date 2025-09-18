@@ -2,6 +2,7 @@ use crate::engine::context::Context;
 use crate::engine::tasks::task::{ExecutionResult, Task, TaskFactory, render_obj};
 use async_trait::async_trait;
 use log::warn;
+use futures::future::join_all;
 use serde_yaml_ng::Value as YmlValue;
 
 #[derive(Debug)]
@@ -45,16 +46,16 @@ impl AssignFactory {
 #[async_trait]
 impl Task for Assign {
     async fn execute(&self, context: Context) -> ExecutionResult {
-        let rendered = render_obj(&self.assign_expr, &context);
-        rendered
+        let rendered = render_obj(&self.assign_expr, &context).await;
+        join_all(rendered
             .as_object()
             .iter()
             .flat_map(|f| f.iter())
             .map(|(k, v)| (k, v.to_string()))
             .map(|(k, v)| Context::wrap_js_code(&format!("var {} = {};", k, v)))
-            .for_each(|expr| {
-                context.evaluate_expr(&expr);
-            });
+            .map(async |expr| {
+                context.evaluate_expr(&expr).await;
+            })).await;
 
         ExecutionResult(context, self.next_task.clone())
     }
@@ -132,17 +133,17 @@ mod test {
 
         let task = obj.unwrap();
 
-        let context = Context::from_request(Request::default(), "./unittest_dsl");
+        let context = Context::from_request(Request::default(), "./unittest_dsl").await;
 
         let res = task.execute(context).await;
         let ctx = res.0;
-        let v = ctx.evaluate_expr("${var_name}");
+        let v = ctx.evaluate_expr("${var_name}").await;
         assert_eq!(v.as_str().unwrap(), "some string");
-        let v = ctx.evaluate_expr("${var_rendered}");
+        let v = ctx.evaluate_expr("${var_rendered}").await;
         assert_eq!(v.as_u64().unwrap(), 4);
-        let v = ctx.evaluate_expr("${var_rendered2}");
+        let v = ctx.evaluate_expr("${var_rendered2}").await;
         assert_eq!(v.as_str().unwrap(), "some string 4");
-        let v = ctx.evaluate_expr("${var_rendered3}");
+        let v = ctx.evaluate_expr("${var_rendered3}").await;
         assert_eq!(v.get("a").unwrap().as_u64().unwrap(), 5);
     }
 }

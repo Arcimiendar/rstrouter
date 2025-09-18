@@ -52,14 +52,14 @@ impl MockFactory {
 #[async_trait]
 impl Task for Mock {
     async fn execute(&self, context: Context) -> ExecutionResult {
-        let rendered = render_obj(&self.args, &context);
+        let rendered = render_obj(&self.args, &context).await;
 
         if let Some(res) = &self.result {
             context.evaluate_expr(&Context::wrap_js_code(&format!(
                 "var {} = {};",
                 res,
                 rendered.to_string()
-            )));
+            ))).await;
         }
 
         if self.sleep_mcs > 0 {
@@ -126,12 +126,12 @@ mod test {
 
         let task = value.unwrap();
 
-        let context = Context::from_request(Request::default(), "./unittest_dsl");
+        let context = Context::from_request(Request::default(), "./unittest_dsl").await;
 
         let res = task.execute(context).await;
         let ctx = res.0;
 
-        let v = ctx.evaluate_expr("${test}");
+        let v = ctx.evaluate_expr("${test}").await;
         assert_eq!(
             v.get("response")
                 .unwrap()

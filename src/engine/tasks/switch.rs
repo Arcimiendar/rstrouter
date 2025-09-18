@@ -64,7 +64,7 @@ impl SwitchFactory {
 impl Task for Switch {
     async fn execute(&self, context: Context) -> ExecutionResult {
         for condition in &self.conditions {
-            let executed_value = context.evaluate_expr(&condition.condition).as_bool();
+            let executed_value = context.evaluate_expr(&condition.condition).await.as_bool();
             if let Some(b) = executed_value
                 && b
             {
@@ -131,17 +131,17 @@ mod test {
             )
             .unwrap();
 
-        let context = Context::from_request(Request::default(), "./unittest_dsl");
+        let context = Context::from_request(Request::default(), "./unittest_dsl").await;
 
-        context.evaluate_expr(&Context::wrap_js_code("var some = 1;"));
+        context.evaluate_expr(&Context::wrap_js_code("var some = 1;")).await;
         let res = task.execute(context).await;
         assert_eq!(res.1.unwrap(), "one");
 
-        res.0.evaluate_expr(&Context::wrap_js_code("var some = 2;"));
+        res.0.evaluate_expr(&Context::wrap_js_code("var some = 2;")).await;
         let res = task.execute(res.0).await;
         assert_eq!(res.1.unwrap(), "two");
 
-        res.0.evaluate_expr(&Context::wrap_js_code("var some = 3;"));
+        res.0.evaluate_expr(&Context::wrap_js_code("var some = 3;")).await;
         let res = task.execute(res.0).await;
         assert_eq!(res.1.unwrap(), "third");
     }
