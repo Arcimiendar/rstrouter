@@ -637,9 +637,10 @@ impl std::fmt::Display for Endpoint {
 
 #[cfg(test)]
 mod test {
+    use rstmytype::ApiEndpointMethod;
     use serde_yaml_ng::{Mapping as YmlMapping, Value as YmlValue};
 
-    use crate::endpoints::parser::Endpoint;
+    use crate::endpoints::parser::{Endpoint, EndpointsCollection};
     #[test]
     fn test_merge_mappings_enum() {
         let left_val: YmlValue = serde_yaml_ng::from_str(
@@ -963,5 +964,19 @@ mod test {
 
         let res = Endpoint::merge_two_types(&obj, &seq);
         assert_eq!(res.get("fields").unwrap().as_sequence().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn smoke_test_fold_is_parsing() {
+        let endp = EndpointsCollection::parse_from_dir("./unittest_dsl");
+        assert_eq!(endp.endpoints.len(), 2);
+
+        let first_endp = &endp.endpoints[0];
+        assert_eq!(first_endp.method, ApiEndpointMethod::Post);
+        assert_eq!(first_endp.guards.len(), 1);
+
+        let second_endp = &endp.endpoints[1];
+        assert_eq!(second_endp.method, ApiEndpointMethod::Get);
+        assert_eq!(second_endp.guards.len(), 2);
     }
 }

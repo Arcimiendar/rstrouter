@@ -30,9 +30,10 @@ pub fn get_route(chunk: Vec<&Endpoint>, dsl_path: &str) -> MethodRouter {
 #[cfg(test)]
 mod test {
     use crate::endpoints::{parser::Endpoint, route::get_route};
+    use axum::{handler::Handler, http::Request};
 
-    #[test]
-    fn test_get_route() {
+    #[tokio::test]
+    async fn test_get_route() {
         let endpoints_owned = vec![
             Endpoint {
                 guards: vec![],
@@ -42,7 +43,7 @@ mod test {
                 yml_content: serde_yaml_ng::from_str(
                     r#"
                       test:
-                        return: ok
+                        return: ok get
                     "#,
                 )
                 .unwrap(),
@@ -56,7 +57,7 @@ mod test {
                 yml_content: serde_yaml_ng::from_str(
                     r#"
                       test:
-                        return: ok
+                        return: ok post
                     "#,
                 )
                 .unwrap(),
@@ -66,6 +67,21 @@ mod test {
 
         let endpoitns = endpoints_owned.iter().collect();
         let r = get_route(endpoitns, "./unittest_dsl");
-        drop(r);
+
+        let req = Request::builder()
+            .uri("/some/")
+            .method("GET")
+            .header("content-type", "text/plain")
+            .body(axum::body::Body::from("hello world"))
+            .unwrap();
+        r.clone().call(req, ()).await;
+
+        let req = Request::builder()
+            .uri("/some/")
+            .method("POST")
+            .header("content-type", "text/plain")
+            .body(axum::body::Body::from("hello world"))
+            .unwrap();
+        r.call(req, ()).await;
     }
 }
