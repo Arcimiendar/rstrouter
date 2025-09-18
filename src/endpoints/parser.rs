@@ -282,6 +282,7 @@ impl Endpoint {
     }
 
     fn merge_two_declarations(decl_l: &YmlValue, decl_r: &YmlValue) -> YmlValue {
+        // todo: unittest it
         let (map1, map2) = (decl_l.as_mapping(), decl_r.as_mapping());
 
         let m1 = map1.iter().flat_map(|m| m.values());
@@ -362,7 +363,6 @@ impl Endpoint {
     }
 
     fn remove_fields_duplicate(to_remove: Vec<YmlValue>) -> Vec<YmlValue> {
-        // todo write tests for this
         let mut new_vec = Vec::with_capacity(to_remove.len());
         let mut used_indices = Vec::with_capacity(to_remove.len());
         for (i, val_l) in to_remove.iter().enumerate() {
@@ -392,8 +392,6 @@ impl Endpoint {
     }
 
     fn merge_two_types(b_left: &YmlValue, b_right: &YmlValue) -> YmlValue {
-        // todo write tests for this
-
         if b_left.is_null() {
             return b_right.clone();
         }
@@ -423,7 +421,7 @@ impl Endpoint {
         );
 
         if b_right.is_sequence() || b_right.is_mapping() {
-            return b_left.clone();
+            return b_right.clone();
         }
 
         return b_left.clone();
@@ -724,5 +722,246 @@ mod test {
         Endpoint::merge_mappings_descriptions(&null, &null, &mut into);
 
         assert!(into.get("description").is_none());
+    }
+
+    #[test]
+    fn test_merge_mappings_type_object() {
+        let mut into = YmlValue::Mapping(serde_yaml_ng::Mapping::new());
+        let object_left: YmlValue = serde_yaml_ng::from_str(
+            r#"
+                fields: 
+                  - field: test
+                    type: string
+                  - field: test1
+                    type: string
+            "#,
+        )
+        .unwrap();
+        let object_right: YmlValue = serde_yaml_ng::from_str(
+            r#"
+                fields:
+                  - field: test
+                    type: string
+                  - field: test2
+                    type: string
+            "#,
+        )
+        .unwrap();
+
+        Endpoint::merge_mappings_type_object(&object_left, &object_right, &mut into);
+        assert_eq!(
+            into.as_mapping()
+                .unwrap()
+                .get("fields")
+                .unwrap()
+                .as_sequence()
+                .unwrap()
+                .len(),
+            3
+        );
+    }
+
+    #[test]
+    fn test_merge_mappings_type_array() {
+        let mut into = YmlValue::Mapping(serde_yaml_ng::Mapping::new());
+        let object_left: YmlValue = serde_yaml_ng::from_str(
+            r#"
+                items:
+                  type: object
+                  fields:
+                    - field: hello
+                      type: string
+                    - field: world
+                      type: string
+                      description: hello
+                  description: hello
+            "#,
+        )
+        .unwrap();
+        let object_right: YmlValue = serde_yaml_ng::from_str(
+            r#"
+                items:
+                  type: object
+                  description: world
+                  fields:
+                    - field: hello
+                      type: string
+                    - field: world
+                      type: string
+                      description: world
+            "#,
+        )
+        .unwrap();
+        Endpoint::merge_mappings_type_array(&object_left, &object_right, &mut into);
+        assert_eq!(
+            into.get("items").unwrap().get("description").unwrap(),
+            "hello; world"
+        );
+    }
+
+    #[test]
+    fn test_merge_mappings() {
+        let object_left: YmlValue = serde_yaml_ng::from_str(
+            r#"
+                type: string
+                description: hello!
+                enum: ['1', '2']
+            "#,
+        )
+        .unwrap();
+        let object_right: YmlValue = serde_yaml_ng::from_str(
+            r#"
+                type: string
+                description: world!
+                enum: ['2', '3']
+            "#,
+        )
+        .unwrap();
+        let res = Endpoint::merge_mappings(&object_left, &object_right);
+        assert_eq!(res.get("description").unwrap(), "hello!; world!");
+        assert_eq!(res.get("type").unwrap(), "string");
+        assert_eq!(res.get("enum").unwrap().as_sequence().unwrap().len(), 3);
+
+        let object_right: YmlValue = serde_yaml_ng::from_str(
+            r#"
+                type: number
+                description: world!
+            "#,
+        )
+        .unwrap();
+        let res = Endpoint::merge_mappings(&object_left, &object_right);
+        assert_eq!(res.get("type").unwrap(), "string");
+        assert_eq!(res.get("description").unwrap(), "hello!");
+
+        let object_left: YmlValue = serde_yaml_ng::from_str(
+            r#"
+                type: object
+                description: hello!
+            "#,
+        )
+        .unwrap();
+        let object_right: YmlValue = serde_yaml_ng::from_str(
+            r#"
+                type: object
+                description: world!
+            "#,
+        )
+        .unwrap();
+        let res = Endpoint::merge_mappings(&object_left, &object_right);
+        assert_eq!(res.get("description").unwrap(), "hello!; world!");
+
+        let object_left: YmlValue = serde_yaml_ng::from_str(
+            r#"
+                type: array
+                description: hello!
+            "#,
+        )
+        .unwrap();
+        let object_right: YmlValue = serde_yaml_ng::from_str(
+            r#"
+                type: array
+                description: world!
+            "#,
+        )
+        .unwrap();
+        let res = Endpoint::merge_mappings(&object_left, &object_right);
+        assert_eq!(res.get("description").unwrap(), "hello!; world!");
+    }
+
+    #[test]
+    fn test_merge_sequence() {
+        let b_left = serde_yaml_ng::from_str(
+            r#"
+                - field: test1
+                  type: number
+                - field: test2
+                  type: string
+            "#,
+        )
+        .unwrap();
+        let b_right = serde_yaml_ng::from_str(
+            r#"
+                - field: test2
+                  type: string
+                - field: test3
+                  type: object
+            "#,
+        )
+        .unwrap();
+        let res = Endpoint::merge_sequences(&b_left, &b_right);
+        assert_eq!(res.as_sequence().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn test_merge_seq_with_map() {
+        let b_left = serde_yaml_ng::from_str(
+            r#"
+                - field: test2
+                  type: string
+                - field: test3
+                  type: object
+            "#,
+        )
+        .unwrap();
+        let b_right = serde_yaml_ng::from_str(
+            r#"
+                type: object
+                fields:
+                  - field: test1
+                    type: number
+                  - field: test2
+                    type: string
+            "#,
+        )
+        .unwrap();
+        let res = Endpoint::merge_seq_with_map(&b_left, &b_right);
+        assert_eq!(res.get("fields").unwrap().as_sequence().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn test_merge_two_types() {
+        let null = YmlValue::Null;
+        let seq = serde_yaml_ng::from_str(
+            r#"
+                - field: test2
+                  type: string
+                - field: test3
+                  type: object
+            "#,
+        )
+        .unwrap();
+        let obj = serde_yaml_ng::from_str(
+            r#"
+                type: object
+                fields:
+                  - field: test1
+                    type: number
+                  - field: test2
+                    type: string
+            "#,
+        )
+        .unwrap();
+        let number = serde_yaml_ng::from_str("5").unwrap();
+
+        let res = Endpoint::merge_two_types(&null, &obj);
+        assert_eq!(res, obj);
+
+        let res = Endpoint::merge_two_types(&seq, &null);
+        assert_eq!(res, seq);
+
+        let res = Endpoint::merge_two_types(&seq, &number);
+        assert_eq!(res, seq);
+
+        let res = Endpoint::merge_two_types(&number, &seq);
+        assert_eq!(res, seq);
+
+        let res = Endpoint::merge_two_types(&number, &null);
+        assert_eq!(res, number);
+
+        let res = Endpoint::merge_two_types(&seq, &obj);
+        assert_eq!(res.get("fields").unwrap().as_sequence().unwrap().len(), 3);
+
+        let res = Endpoint::merge_two_types(&obj, &seq);
+        assert_eq!(res.get("fields").unwrap().as_sequence().unwrap().len(), 3);
     }
 }
