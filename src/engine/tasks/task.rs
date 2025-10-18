@@ -21,7 +21,7 @@ pub trait Task: Debug + Send + Sync {
 }
 
 pub trait TaskFactory: Debug {
-    fn from_yml(&self, task_name: &str, yml: &YmlValue) -> Option<Box<dyn Task>>;
+    fn produce_from_yml(&self, task_name: &str, yml: &YmlValue) -> Option<Box<dyn Task>>;
 
     fn get_next_task(&self, task_name: &str, yml: &YmlValue) -> Option<String> {
         let next_task = yml.get(task_name)?.get("next").and_then(|v| v.as_str());
@@ -36,19 +36,19 @@ pub trait TaskFactory: Debug {
             if next_task_is_next {
                 return Some(key.as_str()?.to_string());
             }
-            if let Some(k) = key.as_str() {
-                if k == task_name {
-                    next_task_is_next = true;
-                }
+            if let Some(k) = key.as_str()
+                && k == task_name
+            {
+                next_task_is_next = true;
             }
         }
-        return None;
+        None
     }
 }
 
 pub async fn render_obj(yml: &YmlValue, context: &Context) -> JsonValue {
     match yml {
-        YmlValue::Bool(v) => JsonValue::Bool(v.clone()),
+        YmlValue::Bool(v) => JsonValue::Bool(*v),
         YmlValue::Mapping(m) => {
             JsonValue::Object(
                 join_all(m.iter().map(async |(k, v)| {
@@ -56,7 +56,7 @@ pub async fn render_obj(yml: &YmlValue, context: &Context) -> JsonValue {
                 }))
                 .await
                 .into_iter()
-                .flat_map(|o| o)
+                .flatten()
                 .collect(),
             )
         }
@@ -118,9 +118,7 @@ pub fn preprocess_obj(yml: &YmlValue) -> YmlValue {
                 .map(|(k, yml)| (preprocess_obj(k), preprocess_obj(yml)))
                 .collect(),
         ),
-        YmlValue::Sequence(seq) => {
-            YmlValue::Sequence(seq.iter().map(|yml| preprocess_obj(yml)).collect())
-        }
+        YmlValue::Sequence(seq) => YmlValue::Sequence(seq.iter().map(preprocess_obj).collect()),
         YmlValue::String(s) => YmlValue::String(fill_env_vars(s)),
         others => others.clone(),
     }

@@ -25,11 +25,11 @@ impl TaskTree {
 
         let tasks: Vec<Box<dyn Task>> = mapping
             .keys()
-            .flat_map(|k| Some(k.as_str()?))
+            .flat_map(|k| k.as_str())
             .flat_map(|k| produce_task(k, &preprocessed_yml))
             .collect();
 
-        Self { tasks: tasks }
+        Self { tasks }
     }
 
     async fn walk_through(&self, context: Context) -> Context {
@@ -52,7 +52,7 @@ impl TaskTree {
             res = task.execute(res.0).await;
         }
 
-        return res.0;
+        res.0
     }
 }
 
@@ -91,7 +91,7 @@ impl Engine {
     pub fn from_template(template: &YmlValue, dsl_path: &str) -> Self {
         Self {
             guards: vec![],
-            tree: TaskTree::from_yml(&template),
+            tree: TaskTree::from_yml(template),
             dsl_path: dsl_path.to_string(),
         }
     }

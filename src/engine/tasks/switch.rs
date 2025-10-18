@@ -20,7 +20,11 @@ pub struct Switch {
 }
 
 impl TaskFactory for SwitchFactory {
-    fn from_yml(&self, task_name: &str, yml: &serde_yaml_ng::Value) -> Option<Box<dyn Task>> {
+    fn produce_from_yml(
+        &self,
+        task_name: &str,
+        yml: &serde_yaml_ng::Value,
+    ) -> Option<Box<dyn Task>> {
         let task_body = yml.get(task_name)?;
         let switch_conditions = task_body
             .get("switch")?
@@ -48,7 +52,7 @@ impl TaskFactory for SwitchFactory {
 
         Some(Box::new(Switch {
             conditions: switch_conditions,
-            next_task: next_task,
+            next_task,
             name: task_name.to_string(),
         }))
     }
@@ -94,7 +98,7 @@ mod test {
     #[test]
     fn factory_returns_none() {
         let factory = SwitchFactory::new();
-        let value = factory.from_yml(
+        let value = factory.produce_from_yml(
             "test",
             &serde_yaml_ng::from_str(
                 r#"
@@ -113,7 +117,7 @@ mod test {
     async fn test_switch_condition() {
         let factory = SwitchFactory::new();
         let task = factory
-            .from_yml(
+            .produce_from_yml(
                 "test",
                 &serde_yaml_ng::from_str(
                     r#"

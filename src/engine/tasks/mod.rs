@@ -31,7 +31,7 @@ pub fn produce_task(task_name: &str, global_value: &YmlValue) -> Option<Box<dyn 
 
     factories
         .iter()
-        .flat_map(|f| f.from_yml(task_name, global_value))
+        .flat_map(|f| f.produce_from_yml(task_name, global_value))
         .next() // returns first successfull parsed task
 }
 

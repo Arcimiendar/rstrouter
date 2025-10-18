@@ -16,7 +16,11 @@ pub struct Ret {
 }
 
 impl TaskFactory for RetFactory {
-    fn from_yml(&self, task_name: &str, yml: &serde_yaml_ng::Value) -> Option<Box<dyn Task>> {
+    fn produce_from_yml(
+        &self,
+        task_name: &str,
+        yml: &serde_yaml_ng::Value,
+    ) -> Option<Box<dyn Task>> {
         let task_body = yml.get(task_name)?;
         let return_expr = task_body.get("return")?.clone();
 
@@ -70,7 +74,7 @@ mod test {
     #[test]
     fn factory_returns_none() {
         let factory = RetFactory::new();
-        let value = factory.from_yml(
+        let value = factory.produce_from_yml(
             "test",
             &serde_yaml_ng::from_str(
                 r#"
@@ -87,7 +91,7 @@ mod test {
     #[test]
     fn factory_returns_task() {
         let factory = RetFactory::new();
-        let value = factory.from_yml(
+        let value = factory.produce_from_yml(
             "test",
             &serde_yaml_ng::from_str(
                 r#"
@@ -104,7 +108,7 @@ mod test {
     async fn test_default_return_status_code() {
         let factory = RetFactory::new();
         let task = factory
-            .from_yml(
+            .produce_from_yml(
                 "test",
                 &serde_yaml_ng::from_str(
                     r#"
@@ -130,7 +134,7 @@ mod test {
     async fn test_custom_return_status_code() {
         let factory = RetFactory::new();
         let task = factory
-            .from_yml(
+            .produce_from_yml(
                 "test",
                 &serde_yaml_ng::from_str(
                     r#"
@@ -154,7 +158,7 @@ mod test {
     async fn test_return_value() {
         let factory = RetFactory::new();
         let task = factory
-            .from_yml(
+            .produce_from_yml(
                 "test",
                 &serde_yaml_ng::from_str(
                     r#"
@@ -191,7 +195,7 @@ mod test {
     async fn test_return_complex_value() {
         let factory = RetFactory::new();
         let task = factory
-            .from_yml(
+            .produce_from_yml(
                 "test",
                 &serde_yaml_ng::from_str(
                     r#"

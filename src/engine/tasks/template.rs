@@ -13,7 +13,7 @@ use crate::engine::tasks::task::{ExecutionResult, Task, TaskFactory, render_obj}
 pub struct TemplateFactory {}
 
 impl TaskFactory for TemplateFactory {
-    fn from_yml(&self, task_name: &str, yml: &YmlValue) -> Option<Box<dyn Task>> {
+    fn produce_from_yml(&self, task_name: &str, yml: &YmlValue) -> Option<Box<dyn Task>> {
         let next_task = self.get_next_task(task_name, yml);
 
         let task_root = yml.get(task_name)?;
@@ -36,10 +36,7 @@ impl TaskFactory for TemplateFactory {
             .flat_map(|(k, v)| Some((k.as_str()?.to_string(), v.as_str()?.to_string())))
             .collect();
 
-        let body = task_root
-            .get("body")
-            .map(|v| v.clone())
-            .unwrap_or(YmlValue::Null);
+        let body = task_root.get("body").cloned().unwrap_or(YmlValue::Null);
 
         let result = task_root
             .get("result")
@@ -99,8 +96,7 @@ impl Task for Template {
             context
                 .evaluate_expr(&Context::wrap_js_code(&format!(
                     "let {} = {};",
-                    r,
-                    result.0.to_string()
+                    r, result.0
                 )))
                 .await;
         }
@@ -109,7 +105,7 @@ impl Task for Template {
     }
 
     fn get_name(&self) -> &str {
-        return &self.name;
+        &self.name
     }
 }
 
@@ -154,7 +150,7 @@ mod test {
     #[test]
     fn test_task_is_not_parsed() {
         let factory = TemplateFactory::new();
-        let obj = factory.from_yml(
+        let obj = factory.produce_from_yml(
             "test",
             &serde_yaml_ng::from_str(
                 r#"
@@ -168,10 +164,16 @@ mod test {
         assert!(obj.is_none());
     }
 
+    #[test]
+    fn test_json_display_ok() {
+        let some_json = json!({"hello": "world"});
+        assert_eq!(some_json.to_string(), format!("{}", some_json));
+    }
+
     #[tokio::test]
     async fn test_template_task() {
         let factory = TemplateFactory::new();
-        let obj = factory.from_yml(
+        let obj = factory.produce_from_yml(
             "test",
             &serde_yaml_ng::from_str(
                 r#"

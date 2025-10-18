@@ -17,7 +17,7 @@ pub struct Mock {
 }
 
 impl TaskFactory for MockFactory {
-    fn from_yml(&self, task_name: &str, yml: &YmlValue) -> Option<Box<dyn Task>> {
+    fn produce_from_yml(&self, task_name: &str, yml: &YmlValue) -> Option<Box<dyn Task>> {
         let task_body = yml.get(task_name)?;
 
         if task_body.get("call")?.as_str()? != "reflect.mock" {
@@ -36,7 +36,7 @@ impl TaskFactory for MockFactory {
         Some(Box::new(Mock {
             args,
             result,
-            next_task: next_task,
+            next_task,
             name: task_name.to_string(),
             sleep_mcs,
         }))
@@ -58,8 +58,7 @@ impl Task for Mock {
             context
                 .evaluate_expr(&Context::wrap_js_code(&format!(
                     "var {} = {};",
-                    res,
-                    rendered.to_string()
+                    res, rendered
                 )))
                 .await;
         }
@@ -89,7 +88,7 @@ mod test {
     #[test]
     fn factory_returns_none() {
         let factory = MockFactory::new();
-        let value = factory.from_yml(
+        let value = factory.produce_from_yml(
             "test",
             &serde_yaml_ng::from_str(
                 r#"
@@ -107,7 +106,7 @@ mod test {
     #[tokio::test]
     async fn test_mock_tasks() {
         let factory = MockFactory::new();
-        let value = factory.from_yml(
+        let value = factory.produce_from_yml(
             "test",
             &serde_yaml_ng::from_str(
                 r#"

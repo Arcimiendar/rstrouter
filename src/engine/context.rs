@@ -26,7 +26,7 @@ impl Context {
         let ctx = Self {
             status_code: RwLock::new(200),
             return_json: RwLock::new(JsonValue::Null),
-            context: context,
+            context,
         };
 
         ctx.evaluate_expr(&Context::wrap_js_code(&format!(
@@ -60,7 +60,7 @@ impl Context {
                 .read()
                 .map(|r| r.clone())
                 .unwrap_or(JsonValue::Null),
-            status: self.status_code.read().map(|r| r.clone()).unwrap_or(500),
+            status: self.status_code.read().map(|r| *r).unwrap_or(500),
         }
     }
 
@@ -68,7 +68,7 @@ impl Context {
         let source = if expr.ends_with('!') {
             &expr[0..expr.len() - 1]
         } else {
-            &expr
+            expr
         };
 
         if let Some(context) = &self.context {
@@ -82,7 +82,7 @@ impl Context {
                 .await;
         } else {
             warn!("Failed to create runtime for js. returning Null");
-            return JsonValue::Null;
+            JsonValue::Null
         }
     }
 

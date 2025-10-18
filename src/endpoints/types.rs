@@ -46,7 +46,7 @@ impl Request {
 
         Self {
             params: query_params,
-            headers: headers,
+            headers,
             body: js_val,
         }
     }
@@ -58,8 +58,8 @@ impl Request {
     ) -> Self {
         Self {
             params: query,
-            headers: headers,
-            body: body,
+            headers,
+            body,
         }
     }
 }

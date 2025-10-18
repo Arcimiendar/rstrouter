@@ -3,7 +3,7 @@ use log::warn;
 use rstmytype::{ApiEndpoint, ApiEndpointMethod, ApiProject};
 use serde_yaml_ng::{Mapping as YmlMapping, Value as YmlValue};
 use std::fs::{read_dir, read_to_string};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug)]
 pub struct Guard {
@@ -39,7 +39,7 @@ impl ApiEndpoint for Endpoint {
     }
 
     fn get_yml_declaration_str(&self) -> Option<&str> {
-        return Some(&self.merged_declaration);
+        Some(&self.merged_declaration)
     }
 }
 
@@ -48,7 +48,7 @@ impl ApiProject for EndpointsCollection {
         "rstrouter"
     }
 
-    fn get_endpoints_iter<'a>(&'a self) -> impl Iterator<Item = &'a impl ApiEndpoint> {
+    fn get_endpoints_iter(&self) -> impl Iterator<Item = &impl ApiEndpoint> {
         self.endpoints.iter()
     }
 }
@@ -81,7 +81,7 @@ impl<'a, T> Iterator for SoftListIter<'a, T> {
             self.current = None;
         }
 
-        return Some(&current.el);
+        Some(&current.el)
     }
 }
 
@@ -203,10 +203,10 @@ impl Endpoint {
                         return;
                     }
 
-                    if let Some(f_name) = f_path.file_name().and_then(|f| f.to_str()) {
-                        if f_name.starts_with(".guard") {
-                            return;
-                        }
+                    if let Some(f_name) = f_path.file_name().and_then(|f| f.to_str())
+                        && f_name.starts_with(".guard")
+                    {
+                        return;
                     }
 
                     if let Some(endpoint) =
@@ -253,14 +253,10 @@ impl Endpoint {
         let f_name = file.file_stem()?.to_str()?;
 
         let mut obj = Self {
-            guards: guard_list
-                .iter()
-                .flat_map(|l| l.iter())
-                .map(|g| g.clone())
-                .collect(),
+            guards: guard_list.iter().flat_map(|l| l.iter()).cloned().collect(),
             tag: tag.to_string(),
             method: method.clone(),
-            yml_content: yml_content,
+            yml_content,
             url_path: format!("{}/{}", url_path, f_name),
             merged_declaration: "".into(),
         };
@@ -302,7 +298,7 @@ impl Endpoint {
         let mut body = YmlValue::Null;
         for val in combined_map {
             if let Some(descr) = val.get("description").and_then(|f| f.as_str()) {
-                if description.len() > 0 {
+                if !description.is_empty() {
                     description.push_str("; ");
                 }
                 description.push_str(descr);
@@ -310,13 +306,13 @@ impl Endpoint {
 
             if let Some(al_list) = val.get("allowlist") {
                 if let Some(pm) = al_list.get("params").and_then(|p| p.as_sequence()) {
-                    params.extend(pm.iter().map(|p| p.clone()));
+                    params.extend(pm.iter().cloned());
                 }
                 if let Some(pm) = al_list.get("query").and_then(|p| p.as_sequence()) {
-                    params.extend(pm.iter().map(|p| p.clone()));
+                    params.extend(pm.iter().cloned());
                 }
                 if let Some(hd) = al_list.get("headers").and_then(|h| h.as_sequence()) {
-                    headers.extend(hd.iter().map(|h| h.clone()));
+                    headers.extend(hd.iter().cloned());
                 }
                 if let Some(bd) = al_list.get("body") {
                     if body.is_null() && !bd.is_null() {
@@ -424,7 +420,7 @@ impl Endpoint {
             return b_right.clone();
         }
 
-        return b_left.clone();
+        b_left.clone()
     }
 
     fn merge_seq_with_map(seq: &YmlValue, obj: &YmlValue) -> YmlValue {
@@ -439,7 +435,7 @@ impl Endpoint {
         if let Some(m) = obj_copy.as_mapping_mut() {
             m.insert(YmlValue::String("fields".into()), merged_fields);
         }
-        return obj_copy;
+        obj_copy
     }
 
     fn merge_sequences(b_left: &YmlValue, b_right: &YmlValue) -> YmlValue {
@@ -448,12 +444,11 @@ impl Endpoint {
         let bl_seq = b_left.as_sequence().unwrap_or(&default);
         let br_seq = b_right.as_sequence().unwrap_or(&default);
 
-        let new_seq = bl_seq.iter().chain(br_seq).map(|v| v.clone()).collect();
+        let new_seq = bl_seq.iter().chain(br_seq).cloned().collect();
 
         let new_seq = Self::remove_fields_duplicate(new_seq);
 
-        let new_body = YmlValue::Sequence(new_seq);
-        return new_body;
+        YmlValue::Sequence(new_seq) // new body
     }
 
     fn merge_mappings(b_left: &YmlValue, b_right: &YmlValue) -> YmlValue {
@@ -488,7 +483,7 @@ impl Endpoint {
 
         Self::merge_mappings_enum(b_left, b_right, &mut type_copy);
 
-        return type_copy;
+        type_copy
     }
 
     fn merge_mappings_type_array(b_left: &YmlValue, b_right: &YmlValue, into: &mut YmlValue) {
@@ -559,13 +554,13 @@ impl Endpoint {
                 res
             });
 
-        if let Some(description) = description_opt {
-            if let Some(m) = into.as_mapping_mut() {
-                m.insert(
-                    YmlValue::String("description".to_string()),
-                    YmlValue::String(description),
-                );
-            }
+        if let Some(description) = description_opt
+            && let Some(m) = into.as_mapping_mut()
+        {
+            m.insert(
+                YmlValue::String("description".to_string()),
+                YmlValue::String(description),
+            );
         }
     }
 
@@ -577,12 +572,12 @@ impl Endpoint {
             .iter()
             .chain(r_enum.iter())
             .flat_map(|v| v.iter())
-            .map(|v| v.clone())
+            .cloned()
             .unique()
             .collect();
 
         if let Some(m) = into.as_mapping_mut()
-            && enums.len() > 0
+            && !enums.is_empty()
         {
             // always true
             m.insert(YmlValue::String("enum".into()), YmlValue::Sequence(enums));
@@ -591,7 +586,7 @@ impl Endpoint {
 }
 
 impl Guard {
-    fn parse_guard_from_dir(dir: &PathBuf) -> Option<Self> {
+    fn parse_guard_from_dir(dir: &Path) -> Option<Self> {
         let mut guard_path = dir.join(".guard");
         if !guard_path.exists() || !guard_path.is_file() {
             guard_path = dir.join(".guard.yml");

@@ -2,10 +2,8 @@ use std::time::Instant;
 
 use axum::{Router, extract::Request, middleware::Next, response::Response};
 use log::{LevelFilter, info, warn};
-use log4rs;
 use log4rs::append::console::ConsoleAppender;
 use log4rs::config::{Appender, Config, Root};
-use tokio;
 
 use crate::endpoints::load_dsl_endpoints;
 
@@ -55,7 +53,7 @@ async fn uri_middleware(request: Request, next: Next) -> Response {
 async fn init_and_run(args: &args::types::Args) {
     let start = Instant::now();
 
-    if init_logging(&args).is_none() {
+    if init_logging(args).is_none() {
         println!("cannot initialize logging!");
         return;
     }
@@ -63,7 +61,7 @@ async fn init_and_run(args: &args::types::Args) {
     print_hello();
 
     let app = Router::new().layer(axum::middleware::from_fn(uri_middleware));
-    let app = load_dsl_endpoints(&args, app);
+    let app = load_dsl_endpoints(args, app);
 
     let listener = match tokio::net::TcpListener::bind(format!("{}:{}", args.bind, args.port)).await
     {

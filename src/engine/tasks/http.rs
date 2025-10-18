@@ -57,7 +57,7 @@ impl HttpArgs {
         }))
         .await
         .into_iter()
-        .flat_map(|o| o)
+        .flatten()
         .flat_map(|(k, v)| Some((k, HeaderValue::from_str(v.as_str()?).ok()?)))
         .collect()
     }
@@ -97,7 +97,7 @@ impl HttpArgs {
         let request_result = self
             .method
             .to_request_builder(url)
-            .headers(self.render_headers(&context).await)
+            .headers(self.render_headers(context).await)
             .query(&self.render_query(context).await)
             .json(&self.render_body(context).await)
             .send()
@@ -133,7 +133,7 @@ impl HttpFactory {
             return None;
         }
 
-        let method = match method_str.split('.').last()? {
+        let method = match method_str.split('.').next_back()? {
             "get" => HttpMethod::Get,
             "post" => HttpMethod::Post,
             "put" => HttpMethod::Put,
@@ -166,7 +166,7 @@ impl HttpFactory {
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect();
 
-        let body = yml.get("body").map(|y| y.clone()).unwrap_or(YmlValue::Null);
+        let body = yml.get("body").cloned().unwrap_or(YmlValue::Null);
 
         Some(HttpArgs {
             url,
@@ -179,7 +179,7 @@ impl HttpFactory {
 }
 
 impl TaskFactory for HttpFactory {
-    fn from_yml(&self, task_name: &str, yml: &YmlValue) -> Option<Box<dyn Task>> {
+    fn produce_from_yml(&self, task_name: &str, yml: &YmlValue) -> Option<Box<dyn Task>> {
         let method = self.parse_method(yml.get(task_name)?)?;
         let next_task = self.get_next_task(task_name, yml);
         let name = task_name.to_string();
@@ -207,8 +207,7 @@ impl Task for Http {
             context
                 .evaluate_expr(&Context::wrap_js_code(&format!(
                     "var {} = {};",
-                    result_name,
-                    response.to_string()
+                    result_name, response
                 )))
                 .await;
         }
@@ -235,7 +234,7 @@ mod test {
     #[test]
     fn factory_returns_none() {
         let factory = HttpFactory::new();
-        let value = factory.from_yml(
+        let value = factory.produce_from_yml(
             "test",
             &serde_yaml_ng::from_str(
                 r#"
@@ -270,7 +269,7 @@ mod test {
                 .await;
 
             let factory = HttpFactory::new();
-            let obj = factory.from_yml(
+            let obj = factory.produce_from_yml(
                 "test",
                 &serde_yaml_ng::from_str(&format!(
                     r#"
@@ -321,7 +320,7 @@ mod test {
             .await;
 
         let factory = HttpFactory::new();
-        let obj = factory.from_yml(
+        let obj = factory.produce_from_yml(
             "test",
             &serde_yaml_ng::from_str(&format!(
                 r#"

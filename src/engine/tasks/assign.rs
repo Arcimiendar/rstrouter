@@ -16,7 +16,7 @@ pub struct Assign {
 }
 
 impl TaskFactory for AssignFactory {
-    fn from_yml(&self, task_name: &str, yml: &YmlValue) -> Option<Box<dyn Task>> {
+    fn produce_from_yml(&self, task_name: &str, yml: &YmlValue) -> Option<Box<dyn Task>> {
         let task_body = yml.get(task_name)?;
         let assign_exprs = task_body.get("assign")?;
         if !assign_exprs.is_mapping() {
@@ -31,7 +31,7 @@ impl TaskFactory for AssignFactory {
 
         Some(Box::new(Assign {
             assign_expr: assign_exprs.clone(),
-            next_task: next_task,
+            next_task,
             name: task_name.to_string(),
         }))
     }
@@ -82,7 +82,7 @@ mod test {
     fn test_task_is_not_parsed() {
         let factory = AssignFactory::new();
 
-        let obj = factory.from_yml(
+        let obj = factory.produce_from_yml(
             "test",
             &serde_yaml_ng::from_str(
                 r#"
@@ -98,7 +98,7 @@ mod test {
 
         assert!(obj.is_none());
 
-        let obj = factory.from_yml(
+        let obj = factory.produce_from_yml(
             "test",
             &serde_yaml_ng::from_str(
                 r#"
@@ -116,7 +116,7 @@ mod test {
     async fn test_assign_task() {
         let factory = AssignFactory::new();
 
-        let obj = factory.from_yml(
+        let obj = factory.produce_from_yml(
             "test",
             &serde_yaml_ng::from_str(
                 r#"

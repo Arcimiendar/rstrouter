@@ -19,7 +19,11 @@ impl DeclarationFactory {
 }
 
 impl TaskFactory for DeclarationFactory {
-    fn from_yml(&self, task_name: &str, yml: &serde_yaml_ng::Value) -> Option<Box<dyn Task>> {
+    fn produce_from_yml(
+        &self,
+        task_name: &str,
+        yml: &serde_yaml_ng::Value,
+    ) -> Option<Box<dyn Task>> {
         let task_root = yml.get(task_name)?;
 
         if task_root.get("call")?.as_str()? != "declare" {
@@ -60,7 +64,7 @@ mod test {
     fn test_task_is_not_parsed() {
         let factory = DeclarationFactory::new();
 
-        let obj = factory.from_yml(
+        let obj = factory.produce_from_yml(
             "test",
             &serde_yaml_ng::from_str(
                 r#"
@@ -77,7 +81,7 @@ mod test {
     #[tokio::test]
     async fn test_declaration_task() {
         let factory = DeclarationFactory::new();
-        let obj = factory.from_yml(
+        let obj = factory.produce_from_yml(
             "test",
             &serde_yaml_ng::from_str(
                 r#"
